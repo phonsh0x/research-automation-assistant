@@ -1,0 +1,94 @@
+# ç§‘ç ”è‡ªåŠ¨åŒ–åŠ©æ‰‹ â€” .gitignore
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+dist/
+build/
+*.egg
+.eggs/
+*.whl
+venv/
+.venv/
+env/
+
+# --- é…ç½®æ–‡ä»¶ï¼ˆå«å¯†é’¥ï¼‰ ---
+.env
+config/api_keys.json
+*.local.yaml
+
+# --- è¿è¡Œæ—¶æ•°æ® ---
+data/pdf/*
+!data/pdf/.gitkeep
+data/markdown/*
+!data/markdown/.gitkeep
+data/vector_db/*
+!data/vector_db/.gitkeep
+data/paper.db
+data/paper.db-wal
+data/paper.db-shm
+data/logs/*
+!data/logs/.gitkeep
+data/search_results/*
+!data/search_results/.gitkeep
+data/profiles/*
+!data/profiles/.gitkeep
+
+# --- IDE ---
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# --- æµ‹è¯• ---
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# --- å…¶ä»– ---
+*.tmp
+*.bak
+
+# ===== ±¾µØÃô¸ĞÅäÖÃ =====
+.env
+*.env
+config/api_keys.json
+config/*.local.json
+config/*.secret.json
+
+# ===== Python »º´æÓëĞéÄâ»·¾³ =====
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.venv/
+venv/
+env/
+
+# ===== ÔËĞĞÈÕÖ¾ =====
+*.log
+data/logs/
+
+# ===== Êı¾İ¿âÓëÔËĞĞ²úÎï =====
+data/*.db
+data/*.sqlite
+data/*.sqlite3
+data/paper.db
+
+# ===== ÎÄÏ×Óë½âÎö½á¹û£¬²»Ìá½»µ½ Git =====
+data/pdf/
+data/markdown/
+data/vector_db/
+data/profiles/
+data/search_results/
+
+# ===== ÏµÍ³ÎÄ¼ş =====
+.DS_Store
+Thumbs.db

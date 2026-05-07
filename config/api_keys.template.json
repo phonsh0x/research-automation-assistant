@@ -1,0 +1,23 @@
+{
+  "_comment": "API 密钥配置模板。复制此文件为 api_keys.json 并填入实际值。该文件已加入 .gitignore。",
+  "deepseek": {
+    "api_key": "",
+    "api_base": "https://api.deepseek.com/v1"
+  },
+  "openai": {
+    "api_key": "",
+    "api_base": "https://api.openai.com/v1"
+  },
+  "pubmed": {
+    "api_key": ""
+  },
+  "semantic_scholar": {
+    "api_key": ""
+  },
+  "unpaywall": {
+    "email": ""
+  },
+  "crossref": {
+    "email": ""
+  }
+}

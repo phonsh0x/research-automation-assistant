@@ -1,0 +1,198 @@
+# ============================================================================
+# 科研自动化助手 — 默认配置文件
+# 所有路径均为项目根目录的相对路径
+# 可通过环境变量覆盖（前缀 PAPER_ASSIST_）
+# ============================================================================
+
+# --- 应用基础设置 ---
+app:
+  name: "课题组科研自动化助手"
+  version: "0.1.0"
+  debug: false
+
+# --- 数据路径 ---
+paths:
+  pdf_dir: "data/pdf"
+  markdown_dir: "data/markdown"
+  vector_db_dir: "data/vector_db"
+  db_path: "data/paper.db"
+  profiles_dir: "data/profiles"
+  search_results_dir: "data/search_results"
+  logs_dir: "data/logs"
+
+# --- 数据库 ---
+database:
+  engine: "sqlite"
+  path: "data/paper.db"
+  pragma:
+    journal_mode: "WAL"
+    foreign_keys: "ON"
+  # FTS5 全文搜索是否启用
+  fts_enabled: true
+
+# --- 文献检索 API ---
+search:
+  # 每个 API 的超时时间（秒）
+  timeout: 30
+  # 最大重试次数
+  max_retries: 3
+  # 重试退避基数（秒）
+  retry_backoff: 2
+  # 请求之间的礼貌延迟（秒）
+  polite_delay: 0.1
+  # 单次检索最大结果数
+  max_results: 100
+  # 优先使用的 API 列表
+  api_priority:
+    - "openalex"
+    - "crossref"
+    - "pubmed"
+    - "arxiv"
+    - "semantic_scholar"
+  # 各 API 的 endpoint
+  endpoints:
+    openalex: "https://api.openalex.org/works"
+    crossref: "https://api.crossref.org/works"
+    pubmed_esearch: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
+    pubmed_efetch: "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+    arxiv: "http://export.arxiv.org/api/query"
+    semantic_scholar: "https://api.semanticscholar.org/graph/v1/paper/search"
+
+# --- PDF 下载 ---
+download:
+  # 下载超时（秒）
+  timeout: 120
+  # User-Agent 格式：{app_name}/{version} (mailto:{contact_email})
+  user_agent_template: "ResearchAutomationAssistant/0.1.0"
+  # 最小有效 PDF 大小（字节），小于此值视为无效
+  min_pdf_size: 10240
+  # 支持断点续传
+  resume_support: true
+
+# --- PDF 转 Markdown ---
+pdf_conversion:
+  # 默认转换工具：marker | pymupdf | nougat
+  default_tool: "marker"
+  # marker 命令行输出格式
+  output_format: "markdown"
+  # 批量处理时是否跳过已转换文件
+  skip_existing: true
+  # 质量检查阈值（低于此分标记为需复核）
+  quality_threshold: 60
+  # 最小正文行数
+  min_content_lines: 50
+  # 每页最低字符数
+  min_chars_per_page: 200
+
+# --- 嵌入模型 ---
+embedding:
+  # 嵌入模型名称
+  model_name: "bge-large-zh-v1.5"
+  # 嵌入维度
+  dimension: 1024
+  # 备选模型
+  fallback_model: "text-embedding-3-small"
+  # 分块策略
+  chunking:
+    # 每块最大字符数
+    max_chunk_size: 800
+    # 块之间的重叠字符数
+    overlap: 100
+    # 分块类型：paragraph | sentence | fixed
+    strategy: "paragraph"
+
+# --- 向量数据库 (ChromaDB) ---
+vector_db:
+  # ChromaDB 持久化目录
+  persist_dir: "data/vector_db"
+  # 集合名称
+  collection_name: "paper_chunks"
+  # 相似度度量：cosine | l2 | ip
+  distance_metric: "cosine"
+
+# --- RAG 检索 ---
+rag:
+  # 向量检索 Top-K
+  retrieval_top_k: 20
+  # 重排序后保留的文档块数
+  rerank_top_n: 8
+  # 相似度最低阈值（cosine），低于此值视为未命中
+  min_similarity: 0.5
+  # 检索结果缓存时间（秒）
+  cache_ttl: 1800
+  # 是否启用混合检索（向量 + BM25）
+  hybrid_search: false
+  # 课题组论文学位加权系数
+  group_paper_weight: 1.2
+  # 年代衰减因子（每年衰减比例）
+  year_decay_factor: 0.02
+
+# --- LLM 调用 ---
+llm:
+  # API 提供商
+  provider: "deepseek"
+  # 模型名称
+  model: "deepseek-v4-pro"
+  # 默认最大生成 token 数
+  max_tokens: 4096
+  # 默认温度（0=确定性，1=随机性）
+  temperature: 0.3
+  # API base URL（可通过环境变量覆盖）
+  api_base: "https://api.deepseek.com/v1"
+  # 请求超时（秒）
+  timeout: 60
+
+# --- 日志 ---
+logging:
+  # 日志级别：DEBUG | INFO | WARNING | ERROR
+  level: "INFO"
+  # 日志格式
+  format: "[%(asctime)s] [%(levelname)s] [%(name)s] %(message)s"
+  # 日期格式
+  date_format: "%Y-%m-%d %H:%M:%S"
+  # 日志文件命名：{module}_{date}.log
+  file_pattern: "{module}_{date}.log"
+  # 日志保留天数
+  retention_days: 30
+  # 是否同时输出到控制台
+  console_output: true
+
+# --- Web UI ---
+web_ui:
+  # Streamlit 服务端口
+  port: 8501
+  # Streamlit 服务地址
+  host: "localhost"
+  # 侧边栏标题（中文）
+  sidebar_title: "科研自动化助手"
+
+# --- FastAPI ---
+api:
+  # API 服务端口
+  port: 8000
+  # API 服务地址
+  host: "localhost"
+  # API 版本前缀
+  prefix: "/api/v1"
+
+# --- 课题组画像 ---
+group_profile:
+  # 自动标签的最低置信度
+  min_tag_confidence: 0.6
+  # 最大研究方向数
+  max_research_areas: 5
+  # 合作网络最小合著次数
+  min_coauthor_count: 2
+  # 报告输出路径
+  report_dir: "data/profiles"
+
+# --- 写作辅助 ---
+writing:
+  # 最大引用条目数
+  max_citations: 30
+  # 引用格式：gb7714 | apa | ieee
+  citation_style: "gb7714"
+  # 文本相似度预警阈值
+  similarity_warning: 0.8
+  # 生成内容最大长度
+  max_generation_length: 8192
