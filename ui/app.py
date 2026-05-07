@@ -28,78 +28,38 @@ sys.path.insert(0, str(PROJECT_ROOT))
 
 import streamlit as st
 
+from ui.state import (
+    ui_key,
+    init_session_state,
+    clear_search_state,
+    clear_fulltext_state,
+    set_page_message,
+    pop_page_message,
+)
+from ui.constants import (
+    PAGE_OPTIONS,
+    VERSION_LABEL,
+    TECH_STACK_LABEL,
+    KEYWORD_TEMPLATES,
+    SEARCH_SOURCES,
+    SEARCH_PAGE_MODES,
+    SORT_OPTIONS,
+    SORT_LABELS,
+    SEARCH_MODE_OPTIONS,
+    SEARCH_MODE_LABELS,
+    LIBRARY_SOURCE_FILTERS,
+    LIBRARY_DISPLAY_COUNTS,
+    FULLTEXT_DISPLAY_COUNTS,
+    EXPORT_FORMATS,
+    WATCH_DAY_OPTIONS,
+)
+from ui.styles import apply_page_config, apply_global_styles
+
 # ============================================================================
 # 页面配置（必须是第一个 Streamlit 命令）
 # ============================================================================
-st.set_page_config(
-    page_title="科研自动化助手",
-    page_icon=":books:",
-    layout="wide",
-    initial_sidebar_state="expanded",
-)
-
-
-# ============================================================================
-# 统一 Key 生成
-# ============================================================================
-
-def ui_key(page: str, name: str, item_id: str | int | None = None) -> str:
-    """生成唯一的 Streamlit widget key，防止 DuplicateElementId。"""
-    if item_id is None:
-        return f"{page}__{name}"
-    return f"{page}__{name}__{item_id}"
-
-
-# ============================================================================
-# Session State 初始化
-# ============================================================================
-
-def init_session_state():
-    """初始化所有 session_state 键，确保跨页面切换时状态不丢失。"""
-    defaults = {
-        "current_page": "首页 — 系统概览",
-
-        # --- 文献检索 ---
-        "search_keyword": "",
-        "search_sources": ["openalex"],
-        "search_year_from": 2020,
-        "search_year_to": 2026,
-        "search_max_results": 20,
-        "search_sort_by": "relevance",
-        "search_oa_only": False,
-        "search_nsc_boost": False,
-        "search_mode_sel": "backfill",
-        "search_results": None,          # 最近一次检索结果列表
-        "last_search_query": None,       # 最近一次检索查询参数
-        "search_total_count": 0,         # 检索结果总数
-        "search_errors": [],             # 检索错误信息
-
-        # --- 文献库 ---
-        "library_keyword": "",
-        "library_source": "全部",
-        "library_year_from": None,
-        "library_year_to": None,
-        "library_limit": 20,
-        "library_results": None,
-        "library_total_count": 0,
-        "selected_paper_ids": [],
-
-        # --- 全文获取 ---
-        "fulltext_target_paper_id": 1,
-        "fulltext_filter_limit": 20,
-        "fulltext_resolve_result": None,
-        "fulltext_download_result": None,
-        "institution_access_confirmed": False,
-        "upload_paper_id": 1,
-        "upload_message": "",
-
-        # --- 提示信息 ---
-        "page_message": None,            # (type, text) 跨页面消息
-    }
-    for key, value in defaults.items():
-        if key not in st.session_state:
-            st.session_state[key] = value
-
+apply_page_config()
+apply_global_styles()
 
 init_session_state()
 
@@ -144,25 +104,12 @@ with st.sidebar:
     st.divider()
 
     # 页面列表
-    page_options = [
-        "首页 — 系统概览",
-        "文献检索",
-        "我的文献库",
-        "全文获取 / PDF 下载",
-        "PDF 转换",
-        "RAG 智能问答",
-        "课题组画像",
-        "写作辅助",
-        "系统设置",
-    ]
-
-    # 确定默认索引
-    current = st.session_state.get("current_page", "首页 — 系统概览")
-    default_index = page_options.index(current) if current in page_options else 0
+    current = st.session_state.get("current_page", PAGE_OPTIONS[0])
+    default_index = PAGE_OPTIONS.index(current) if current in PAGE_OPTIONS else 0
 
     page = st.radio(
         "导航",
-        options=page_options,
+        options=PAGE_OPTIONS,
         index=default_index,
         key="current_page",
     )
@@ -172,44 +119,18 @@ with st.sidebar:
     # 快速操作
     with st.expander("快速操作"):
         if st.button("清空检索结果", key=ui_key("sidebar", "clear_search"), use_container_width=True):
-            st.session_state["search_results"] = None
-            st.session_state["last_search_query"] = None
-            st.session_state["search_total_count"] = 0
-            st.session_state["search_errors"] = []
-            st.session_state["page_message"] = ("info", "检索结果已清空。")
+            clear_search_state()
+            set_page_message("info", "检索结果已清空。")
             st.rerun()
 
         if st.button("清空全文获取状态", key=ui_key("sidebar", "clear_fulltext"), use_container_width=True):
-            st.session_state["fulltext_resolve_result"] = None
-            st.session_state["fulltext_download_result"] = None
-            st.session_state["institution_access_confirmed"] = False
-            st.session_state["upload_message"] = ""
-            st.session_state["page_message"] = ("info", "全文获取状态已清空。")
+            clear_fulltext_state()
+            set_page_message("info", "全文获取状态已清空。")
             st.rerun()
 
     st.divider()
-    st.caption("版本: 0.2.0 (Phase 2)")
-    st.caption("基于 DeepSeek-V4-Pro")
-
-
-# ============================================================================
-# 跨页面消息显示
-# ============================================================================
-
-def show_page_message():
-    """显示跨页面消息（一次显示后自动清除）。"""
-    msg = st.session_state.get("page_message")
-    if msg:
-        msg_type, msg_text = msg
-        if msg_type == "success":
-            st.success(msg_text)
-        elif msg_type == "warning":
-            st.warning(msg_text)
-        elif msg_type == "error":
-            st.error(msg_text)
-        else:
-            st.info(msg_text)
-        st.session_state["page_message"] = None
+    st.caption(VERSION_LABEL)
+    st.caption(TECH_STACK_LABEL)
 
 
 # ============================================================================
@@ -222,16 +143,7 @@ def _render_keyword_search():
     # 药物化学关键词模板
     with st.expander("药物化学关键词模板（点击展开）"):
         col_t1, col_t2, col_t3 = st.columns(3)
-        templates = {
-            "靶向蛋白降解 (PROTAC/分子胶)": 'PROTAC OR "molecular glue" OR "targeted protein degradation"',
-            "共价抑制剂": '"covalent inhibitor" OR "irreversible inhibitor" OR "targeted covalent inhibitor"',
-            "变构调节剂": '"allosteric modulator" OR "allosteric inhibitor" OR "allosteric regulation"',
-            "AI 驱动的药物发现": '"AI-driven drug discovery" OR "machine learning drug design" OR "deep learning drug discovery"',
-            "基于片段的药物设计 FBDD": '"fragment-based drug design" OR FBDD OR "fragment screening"',
-            "抗肿瘤药物": 'anticancer OR antitumor OR "cancer drug discovery"',
-            "天然产物药物化学": '"natural product" AND "drug discovery" OR "natural product chemistry"',
-            "先导化合物优化": '"lead optimization" OR "lead compound" AND "medicinal chemistry"',
-        }
+        templates = KEYWORD_TEMPLATES
         with col_t1:
             for i, (label, template) in enumerate(list(templates.items())[:3]):
                 if st.button(label, key=f"tpl_{i}", use_container_width=True):
@@ -284,7 +196,7 @@ def _render_keyword_search():
     with col5:
         sources = st.multiselect(
             "数据源",
-            options=["openalex", "crossref", "pubmed", "europe_pmc"],
+            options=SEARCH_SOURCES,
             default=st.session_state.get("search_sources", ["openalex"]),
             key="search_sources",
         )
@@ -307,18 +219,18 @@ def _render_keyword_search():
         with col_b:
             sort_by = st.selectbox(
                 "排序方式",
-                options=["relevance", "year", "citations"],
-                index=["relevance", "year", "citations"].index(
+                options=SORT_OPTIONS,
+                index=SORT_OPTIONS.index(
                     st.session_state.get("search_sort_by", "relevance")
                 ),
-                format_func=lambda x: {"relevance": "相关度", "year": "年份", "citations": "引用数"}[x],
+                format_func=lambda x: SORT_LABELS[x],
                 key="search_sort_by",
             )
             search_mode_sel = st.selectbox(
                 "检索策略",
-                options=["backfill", "daily_watch"],
+                options=SEARCH_MODE_OPTIONS,
                 index=0 if st.session_state.get("search_mode_sel", "backfill") == "backfill" else 1,
-                format_func=lambda x: {"backfill": "批量回填 (优先 OpenAlex)", "daily_watch": "日常监控 (优先 Crossref/PubMed)"}[x],
+                format_func=lambda x: SEARCH_MODE_LABELS[x],
                 key="search_mode_sel",
             )
 
@@ -337,11 +249,8 @@ def _render_keyword_search():
             _restore_last_search()
     with col_btn3:
         if st.button("清空检索结果", key=ui_key("search", "clear_btn"), use_container_width=True):
-            st.session_state["search_results"] = None
-            st.session_state["last_search_query"] = None
-            st.session_state["search_total_count"] = 0
-            st.session_state["search_errors"] = []
-            st.session_state["page_message"] = ("info", "检索结果已清空。")
+            clear_search_state()
+            set_page_message("info", "检索结果已清空。")
             st.rerun()
 
     # 显示已有的检索结果
@@ -383,19 +292,19 @@ def _restore_last_search():
                     "year_to": None,
                     "max_results": run_dict["total_found"],
                 }
-                st.session_state["page_message"] = (
+                set_page_message(
                     "success",
                     f"已恢复最近检索结果: {len(papers)} 篇论文",
                 )
                 clear_stats_cache()
             else:
-                st.session_state["page_message"] = ("warning", "数据库中未找到论文记录。")
+                set_page_message("warning", "数据库中未找到论文记录。")
         else:
-            st.session_state["page_message"] = ("info", "没有历史检索记录。")
+            set_page_message("info", "没有历史检索记录。")
 
         st.rerun()
     except Exception as e:
-        st.session_state["page_message"] = ("error", f"恢复检索结果失败: {e}")
+        set_page_message("error", f"恢复检索结果失败: {e}")
         st.rerun()
     finally:
         conn.close()
@@ -564,7 +473,7 @@ def _render_journal_watch():
     st.divider()
     col_d1, col_d2 = st.columns([2, 1])
     with col_d1:
-        days = st.selectbox("监控最近天数", options=[1, 3, 7, 14, 30], index=2, key=ui_key("search", "watch_days"))
+        days = st.selectbox("监控最近天数", options=WATCH_DAY_OPTIONS, index=2, key=ui_key("search", "watch_days"))
     with col_d2:
         active_only = st.checkbox("仅活跃期刊", value=True, key=ui_key("search", "watch_active_only"))
 
@@ -636,7 +545,7 @@ def _execute_journal_watch(wl, days, active_only):
 if page == "首页 — 系统概览":
     st.title("系统概览")
 
-    show_page_message()
+    pop_page_message()
 
     st.markdown("""
     ### 欢迎使用课题组科研自动化助手
@@ -692,12 +601,12 @@ elif page == "文献检索":
     st.title("文献检索")
     st.markdown("通过合法开放 API 检索学术论文。")
 
-    show_page_message()
+    pop_page_message()
 
     # 检索模式选择
     search_mode = st.radio(
         "检索模式",
-        options=["按关键词检索", "重点期刊监控"],
+        options=SEARCH_PAGE_MODES,
         horizontal=True,
         key="search_mode",
     )
@@ -712,7 +621,7 @@ elif page == "我的文献库":
     st.title("我的文献库")
     st.markdown("管理已入库的论文。")
 
-    show_page_message()
+    pop_page_message()
 
     tab1, tab2 = st.tabs(["论文列表", "导入/导出"], key=ui_key("library", "tabs"))
 
@@ -730,7 +639,7 @@ elif page == "我的文献库":
         with col_l2:
             library_limit = st.selectbox(
                 "显示数量",
-                options=[10, 20, 50, 100],
+                options=LIBRARY_DISPLAY_COUNTS,
                 index=[10, 20, 50, 100].index(st.session_state.get("library_limit", 20)),
                 key="library_limit",
             )
@@ -739,7 +648,7 @@ elif page == "我的文献库":
         with col_l3:
             library_source = st.selectbox(
                 "数据源筛选",
-                options=["全部", "openalex", "crossref", "pubmed", "europe_pmc"],
+                options=LIBRARY_SOURCE_FILTERS,
                 index=0,
                 key="library_source",
             )
@@ -832,7 +741,7 @@ elif page == "我的文献库":
             st.info("文件导入功能将在后续版本中实现。")
 
         st.markdown("#### 导出文献")
-        export_format = st.selectbox("导出格式", ["BibTeX", "CSV", "JSON"], key=ui_key("library", "export_format"))
+        export_format = st.selectbox("导出格式", EXPORT_FORMATS, key=ui_key("library", "export_format"))
         if st.button("导出全部论文", key=ui_key("library", "export_btn")):
             try:
                 repo = get_cached_repository()
@@ -855,7 +764,7 @@ elif page == "全文获取 / PDF 下载":
     st.title("全文获取 / PDF 下载")
     st.markdown("通过合法开放 API 获取学术论文 PDF 全文。")
 
-    show_page_message()
+    pop_page_message()
 
     # 统计卡片（使用缓存）
     stats = get_cached_download_stats()
@@ -928,7 +837,7 @@ elif page == "全文获取 / PDF 下载":
     with col_f1:
         pending_limit = st.selectbox(
             "显示数量",
-            options=[10, 20, 50, 100],
+            options=FULLTEXT_DISPLAY_COUNTS,
             index=[10, 20, 50, 100].index(st.session_state.get("fulltext_filter_limit", 20))
             if st.session_state.get("fulltext_filter_limit", 20) in [10, 20, 50, 100] else 1,
             key="fulltext_filter_limit",
@@ -1032,7 +941,7 @@ elif page == "全文获取 / PDF 下载":
                 success = repo.mark_manual_review(target_paper_id, "用户在 UI 中标记为需人工审查")
                 if success:
                     st.success(f"论文 {target_paper_id} 已标记为人工审查")
-                    st.session_state["page_message"] = ("info", f"论文 {target_paper_id} 已标记为人工审查，稍后可通过手动上传获取。")
+                    set_page_message("info", f"论文 {target_paper_id} 已标记为人工审查，稍后可通过手动上传获取。")
                     clear_stats_cache()
                 else:
                     st.error("更新失败")
@@ -1163,7 +1072,7 @@ elif page == "PDF 转换":
     st.title("PDF 转 Markdown")
     st.markdown("将学术 PDF 论文转换为结构化 Markdown。")
 
-    show_page_message()
+    pop_page_message()
     st.info("PDF 转换功能将在 Phase 2 中实现。转换引擎支持 marker, pymupdf, nougat。")
 
     uploaded_pdf = st.file_uploader("上传 PDF 文件", type=["pdf"], key=ui_key("pdf_convert", "upload_file"))
@@ -1175,7 +1084,7 @@ elif page == "RAG 智能问答":
     st.title("RAG 智能问答")
     st.markdown("基于本地文献库的检索增强生成问答。")
 
-    show_page_message()
+    pop_page_message()
     st.info("RAG 问答功能将在 Phase 2 中实现。回答将基于本地已入库文献生成。")
 
     question = st.text_area(
@@ -1195,7 +1104,7 @@ elif page == "课题组画像":
     st.title("课题组画像")
     st.markdown("分析课题组已发表论文，生成研究方向画像。")
 
-    show_page_message()
+    pop_page_message()
     st.info("课题组画像功能将在 Phase 3 中实现。")
     st.markdown("""
     #### 即将支持的功能
@@ -1210,7 +1119,7 @@ elif page == "写作辅助":
     st.title("写作辅助")
     st.markdown("中文学术写作助手，辅助撰写文献综述、基金申请书和学术论文。")
 
-    show_page_message()
+    pop_page_message()
     st.info("写作辅助功能将在 Phase 3 中实现。")
 
     writing_type = st.selectbox(
@@ -1235,7 +1144,7 @@ elif page == "系统设置":
     st.title("系统设置")
     st.markdown("配置系统参数和 API 密钥。")
 
-    show_page_message()
+    pop_page_message()
 
     tab1, tab2, tab3 = st.tabs(["API 配置", "系统参数", "关于"], key=ui_key("settings", "tabs"))
 
