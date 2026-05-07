@@ -11,7 +11,7 @@ def render():
     render_page_header("系统设置", "配置系统参数和 API 密钥。")
     render_page_message()
 
-    tab1, tab2, tab3 = st.tabs(["API 配置", "系统参数", "关于"], key=ui_key("settings", "tabs"))
+    tab1, tab2, tab3 = st.tabs(["API 配置", "系统参数", "关于"])
 
     with tab1:
         st.markdown("#### API 密钥配置")

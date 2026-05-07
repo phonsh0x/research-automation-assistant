@@ -19,7 +19,7 @@ def render():
     render_page_header("我的文献库", "管理已入库的论文。")
     render_page_message()
 
-    tab1, tab2 = st.tabs(["论文列表", "导入/导出"], key=ui_key("library", "tabs"))
+    tab1, tab2 = st.tabs(["论文列表", "导入/导出"])
 
     with tab1:
         st.markdown("#### 搜索本地文献库")
