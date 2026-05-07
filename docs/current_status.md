@@ -1,7 +1,7 @@
 # 当前状态
 
 > 最后更新: 2026-05-07
-> 当前版本: 0.2.0 (Phase 2)
+> 当前版本: 0.2.2 (v0.2.2-ui-refactor)
 
 ---
 
@@ -9,7 +9,7 @@
 
 | 项目 | 状态 |
 |------|------|
-| 当前版本 | 0.2.0 (Phase 2) |
+| 当前版本 | 0.2.2 (Phase 2, UI 重构完成) |
 | 总测试数 | **110** |
 | 通过 | **110** (100%) |
 | 测试文件 | 4 个 (test_database.py, test_paper_search.py, test_fulltext.py, test_repository.py) |
@@ -85,54 +85,73 @@
 | `/api/v1/profile/report` | GET | 🔶 占位 |
 | `/api/v1/export/bibtex` | GET | 🔶 占位 |
 
-### 2.6 Streamlit 前端
+### 2.6 Streamlit 前端（UI 重构已完成 — v0.2.2）
+
+**架构**：`ui/app.py` (103 行) → 侧边栏 + PAGE_RENDERERS 路由 → 9 个页面模块。
+
+```
+ui/
+├── app.py              (103 行 — 入口、侧边栏、路由分发)
+├── state.py            (213 行 — 50+ key 常量、init、clear helpers)
+├── constants.py        (161 行 — 页面列表、12 个 MedChem chips、全部选项)
+├── styles.py           ( 56 行 — set_page_config + 自定义 CSS)
+├── pages/              (9 页面 + __init__)
+│   ├── dashboard.py         — 首页统计
+│   ├── literature_search.py — 关键词检索 + 期刊监控 + 12 chips + st.form
+│   ├── library.py           — 文献库搜索/筛选/导出
+│   ├── fulltext_download.py — 全文获取工作流（选择→详情→操作）
+│   ├── pdf_convert.py       — 占位 (Phase 2.3)
+│   ├── rag_chat.py          — 占位 (Phase 2.5)
+│   ├── group_profile.py     — 占位 (Phase 3)
+│   ├── writing_assistant.py — 占位 (Phase 3)
+│   └── settings.py          — API 配置、系统参数、关于
+├── components/         (7 文件 — layout, metric_cards, paper_table, filters, messages, actions)
+└── services/           (5 文件 — repository, search, fulltext, export)
+```
 
 | 页面 | 功能 | 状态 |
 |------|------|------|
 | 首页/系统概览 | 统计卡片、版本信息、法律声明 | ✅ |
-| 文献检索 | 关键词检索 + 期刊监控 + 药物化学模板 | ✅ |
+| 文献检索 | st.form 表单 + 12 MedChem chips + 期刊监控 + 论文选择详情 | ✅ |
 | 我的文献库 | 搜索/筛选/导出 | ✅ |
-| 全文获取/PDF下载 | 待获取列表、单篇/批量下载、人工上传 | ✅ |
+| 全文获取/PDF下载 | 筛选→选择→详情→操作工作流，校园网授权 gate，手动上传 gate | ✅ |
 | PDF 转换 | 上传界面 | 🔶 占位 |
 | RAG 智能问答 | 输入界面 | 🔶 占位 |
 | 课题组画像 | 说明文字 | 🔶 占位 |
 | 写作辅助 | 输入界面 | 🔶 占位 |
 | 系统设置 | API配置、系统参数、技术栈信息 | ✅ |
 
+**兼容性规则**（streamlit==1.39.1）：
+- 交互控件必须有显式 `key=`：`st.button`, `st.text_input`, `st.number_input`, `st.selectbox`, `st.multiselect`, `st.checkbox`, `st.radio`, `st.text_area`, `st.file_uploader`, `st.download_button`, `st.form`
+- 布局 API 不得传 `key`：`st.tabs`, `st.columns`, `st.container`, `st.expander`, `st.form_submit_button`
+
 ---
 
 ## 三、当前已知问题
 
-### 严重问题
+### 轻微问题
 
-1. **ui/app.py 超载（1268 行）**
-   - 9 个页面的所有 UI 代码混在一个文件中
-   - if/elif 路由链超过 650 行
-   - 全文获取页面约 305 行内联代码
-   - 存在 **StreamlitDuplicateElementId** 风险：多个相同类型的 widget 可能因 key 管理不善导致 ID 冲突
+1. **`_restore_last_search()` 恢复的是"最近入库论文"而非"最近检索结果"** — 按钮名称与实际行为不完全一致
+2. **UI 层缺少自动化测试** — 后端 110 测试全部通过，前端 0 测试覆盖
+3. **`JournalWatchlist` 仍在页面层直接导入** — `literature_search.py` 中有一处 `# TODO: move to service`
 
-2. **session_state 管理分散**
-   - 30 个 key 定义在 `init_session_state()` 中，但还有 4 个 widget key（`search_mode`, `rag_question`, `writing_type`, `writing_input`）由 Streamlit 自动创建，未在统一位置声明
+### 已修复问题
 
-3. **缺少 UI 层测试**
-   - 后端 110 测试全部通过
-   - UI 层 0 测试覆盖
-   - session_state 初始化、缓存逻辑、跨页面状态迁移均未验证
-
-### 中等/轻微问题
-
-4. **`_restore_last_search()` 恢复的是"最近入库论文"而非"最近检索结果"** — 按钮名称与实际行为不完全一致
-5. **文献检索失败时 `search_results` 未清除** — 已修复（`_execute_search` 的 except 块中设置 `None`）
-6. **数据库连接在异常时可能泄漏** — 已修复（`_restore_last_search` 添加 `finally: conn.close()`）
+- ~~`ui/app.py` 超载（1268 行）~~ → 已拆分为 pages/components/services/state/constants/styles
+- ~~StreamlitDuplicateElementId 风险~~ → 所有交互控件显式 key，布局 API 不传 key
+- ~~session_state 管理分散~~ → 集中在 `ui/state.py`，50+ key 常量
+- ~~文献检索失败时 search_results 未清除~~ → 已修复
+- ~~数据库连接泄漏~~ → 已修复
+- ~~st.form_submit_button 不支持 key~~ → 已移除
+- ~~st.tabs 不支持 key~~ → 已移除
+- ~~全文获取页 selectbox 返回 None 崩溃~~ → 已加固
 
 ---
 
-## 四、建议：先做 UI 重构，再继续 Phase 2.3
+## 四、下一步：Phase 2.3 PDF 转 Markdown
 
-**理由：**
-- 当前 `ui/app.py` 已达 1268 行，Phase 2.3 PDF 转换还需新增页面代码
-- 如果继续往 `ui/app.py` 塞代码，StreamlitDuplicateElementId 问题会恶化
-- UI 重构不影响后端功能（110 个测试继续通过）
-- 重构后添加新页面只需新增 `ui/pages/pdf_convert.py`，不会触碰已有页面
+**当前阻塞**：无。UI 重构已完成，可以安全地新增 `ui/pages/pdf_convert.py` 和 `src/pdf_converter/` 实现。
 
-**详细重构计划**: 见 `docs/ui_refactor_plan.md`
+**详细计划**：见 `docs/phase2_3_plan.md`
+
+**建议分支**：`feature/phase2.3-pdf-convert`

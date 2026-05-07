@@ -1,5 +1,32 @@
 # 变更日志
 
+## [v0.2.2-ui-refactor] — 2026-05-07 UI 重构
+
+### 架构重构
+- `ui/app.py` 从 1297 行简化为 103 行入口路由
+- 拆分 9 个页面至 `ui/pages/`，每个页面导出 `render()`
+- 抽离 7 个可复用组件至 `ui/components/`（layout / metric_cards / paper_table / filters / messages / actions）
+- 抽离 5 个 service 至 `ui/services/`（repository / search / fulltext / export），封装全部后端调用
+- 抽离 `ui/state.py`（50+ key 常量 + session_state 集中管理）
+- 抽离 `ui/constants.py`（页面列表、12 MedChem chips、全部选项）
+- 抽离 `ui/styles.py`（set_page_config + 自定义 CSS）
+
+### 交互优化
+- 文献检索页：st.form 批量提交 + 12 个药物化学快捷 chips + 论文选择详情
+- 全文获取页：筛选→选择→详情→操作工作流；手动 paper_id 降级至折叠调试区
+- 校园网授权访问和手动上传均设合规确认 gate
+
+### 兼容性修复
+- 所有交互控件显式 `key=`（72 处），消除 StreamlitDuplicateElementId
+- 适配 streamlit==1.39.1：st.form_submit_button / st.tabs / st.columns / st.expander 不传 key
+- 加固空状态处理：selectbox None 检查、dict.get 替代裸 key 访问、label_to_id 映射
+
+### 测试
+- 110 passed, 0 failed
+- src/ / api/ / tests/ / migrations/ 零修改
+
+---
+
 ## [Phase 1] — 2026-05-07 项目骨架版
 
 ### 已完成
