@@ -30,6 +30,8 @@ KEY_SEARCH_RESULTS = "search_results"
 KEY_LAST_SEARCH_QUERY = "last_search_query"
 KEY_SEARCH_TOTAL_COUNT = "search_total_count"
 KEY_SEARCH_ERRORS = "search_errors"
+KEY_SEARCH_TEMPLATE_SELECTED = "search_template_selected"
+KEY_SEARCH_LAST_STATS = "search_last_stats"
 
 # --- Library ---
 KEY_LIBRARY_KEYWORD = "library_keyword"
@@ -86,6 +88,8 @@ _DEFAULTS: dict[str, object] = {
     KEY_LAST_SEARCH_QUERY: None,
     KEY_SEARCH_TOTAL_COUNT: 0,
     KEY_SEARCH_ERRORS: [],
+    "search_template_selected": None,
+    "search_last_stats": None,
 
     # --- 文献库 ---
     KEY_LIBRARY_KEYWORD: "",

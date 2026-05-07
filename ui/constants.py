@@ -136,6 +136,25 @@ LEGAL_STATUS_OPTIONS = [
 ]
 
 # ============================================================================
+# Medicinal chemistry quick-access keyword chips
+# ============================================================================
+
+MEDCHEM_CHIPS = {
+    "ADC linker": '"ADC linker" OR "antibody-drug conjugate linker"',
+    "antibody-drug conjugate": '"antibody-drug conjugate" OR ADC',
+    "PROTAC": 'PROTAC OR "PROTACs" OR "targeted protein degradation"',
+    "molecular glue": '"molecular glue" OR "molecular glue degrader"',
+    "covalent inhibitor": '"covalent inhibitor" OR "irreversible inhibitor" OR TCIs',
+    "bioorthogonal chemistry": '"bioorthogonal chemistry" OR "click chemistry" OR "bioorthogonal ligation"',
+    "medicinal chemistry lead optimization": '"lead optimization" AND "medicinal chemistry" OR "lead compound optimization"',
+    "natural product drug discovery": '"natural product" AND "drug discovery" OR "natural product chemistry"',
+    "tumor microenvironment drug delivery": '"tumor microenvironment" AND "drug delivery" OR "TME targeting"',
+    "platinum complex anticancer": '"platinum complex" OR "platinum anticancer" OR "Pt(II) complex"',
+    "kinase inhibitor": '"kinase inhibitor" OR "kinase inhibitors" OR "protein kinase inhibitor"',
+    "peptide drug conjugate": '"peptide drug conjugate" OR "PDC" OR "peptide-drug conjugate"',
+}
+
+# ============================================================================
 # Journal watch
 # ============================================================================
 
