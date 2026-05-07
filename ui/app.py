@@ -34,7 +34,6 @@ from ui.state import (
     clear_search_state,
     clear_fulltext_state,
     set_page_message,
-    pop_page_message,
 )
 from ui.constants import (
     PAGE_OPTIONS,
@@ -54,6 +53,10 @@ from ui.constants import (
     WATCH_DAY_OPTIONS,
 )
 from ui.styles import apply_page_config, apply_global_styles
+from ui.components.layout import render_page_header, render_section, render_empty_state, render_divider
+from ui.components.metric_cards import render_database_stats, render_fulltext_stats
+from ui.components.paper_table import render_paper_table
+from ui.components.messages import render_page_message
 
 # ============================================================================
 # 页面配置（必须是第一个 Streamlit 命令）
@@ -427,9 +430,8 @@ def _display_search_results():
             "来源": paper.get("source", ""),
         })
 
-    st.dataframe(
+    render_paper_table(
         table_data,
-        use_container_width=True,
         column_config={
             "序号": st.column_config.NumberColumn(width="small"),
             "标题": st.column_config.TextColumn(width="large"),
@@ -465,9 +467,9 @@ def _render_journal_watch():
                     "状态": "活跃" if j.get("is_active") else "停用",
                     "RSS": "有" if j.get("rss_url") else "无",
                 })
-            st.dataframe(journal_data, use_container_width=True)
+            render_paper_table(journal_data)
         else:
-            st.warning("期刊清单为空，请先初始化数据库。")
+            render_empty_state("期刊清单为空", "请先初始化数据库。")
 
     # 监控设置
     st.divider()
@@ -543,9 +545,9 @@ def _execute_journal_watch(wl, days, active_only):
 
 # --- 首页 ---
 if page == "首页 — 系统概览":
-    st.title("系统概览")
+    render_page_header("系统概览")
 
-    pop_page_message()
+    render_page_message()
 
     st.markdown("""
     ### 欢迎使用课题组科研自动化助手
@@ -569,21 +571,9 @@ if page == "首页 — 系统概览":
     try:
         db_stats = get_cached_db_stats()
         ft_stats = get_cached_download_stats()
-
-        col1, col2, col3, col4 = st.columns(4)
-        with col1:
-            st.metric(label="本地论文数", value=db_stats.get("total_papers", 0))
-        with col2:
-            st.metric(label="已下载 PDF", value=ft_stats.get("with_pdf", 0))
-        with col3:
-            st.metric(label="已转 Markdown", value=db_stats.get("total_full_texts", 0))
-        with col4:
-            st.metric(label="OA 论文", value=ft_stats.get("by_source", {}).get("unpaywall", 0))
+        render_database_stats(db_stats, ft_stats)
     except Exception:
-        col1, col2, col3, col4 = st.columns(4)
-        for c in [col1, col2, col3, col4]:
-            with c:
-                st.metric(label="-", value="N/A")
+        render_database_stats({"total_papers": 0}, {"with_pdf": 0, "by_source": {}})
 
     st.markdown("""
     #### 快速开始
@@ -598,10 +588,9 @@ if page == "首页 — 系统概览":
 
 # --- 文献检索 ---
 elif page == "文献检索":
-    st.title("文献检索")
-    st.markdown("通过合法开放 API 检索学术论文。")
+    render_page_header("文献检索", "通过合法开放 API 检索学术论文。")
 
-    pop_page_message()
+    render_page_message()
 
     # 检索模式选择
     search_mode = st.radio(
@@ -618,10 +607,9 @@ elif page == "文献检索":
 
 # --- 我的文献库 ---
 elif page == "我的文献库":
-    st.title("我的文献库")
-    st.markdown("管理已入库的论文。")
+    render_page_header("我的文献库", "管理已入库的论文。")
 
-    pop_page_message()
+    render_page_message()
 
     tab1, tab2 = st.tabs(["论文列表", "导入/导出"], key=ui_key("library", "tabs"))
 
@@ -689,7 +677,7 @@ elif page == "我的文献库":
                     st.session_state["library_total_count"] = len(papers)
                     st.session_state["search_errors"] = []
                     if not papers:
-                        st.info("未找到匹配的论文。")
+                        render_empty_state("未找到", "没有匹配的论文。")
                 except Exception as e:
                     st.error(f"搜索失败: {e}")
 
@@ -721,9 +709,8 @@ elif page == "我的文献库":
                     "入日期": (paper.get("created_at") or "")[:10],
                 })
 
-            st.dataframe(
+            render_paper_table(
                 table_data,
-                use_container_width=True,
                 column_config={
                     "ID": st.column_config.NumberColumn(width="small"),
                     "标题": st.column_config.TextColumn(width="large"),
@@ -761,10 +748,9 @@ elif page == "我的文献库":
 
 # --- 全文获取 / PDF 下载 ---
 elif page == "全文获取 / PDF 下载":
-    st.title("全文获取 / PDF 下载")
-    st.markdown("通过合法开放 API 获取学术论文 PDF 全文。")
+    render_page_header("全文获取 / PDF 下载", "通过合法开放 API 获取学术论文 PDF 全文。")
 
-    pop_page_message()
+    render_page_message()
 
     # 统计卡片（使用缓存）
     stats = get_cached_download_stats()
@@ -773,17 +759,7 @@ elif page == "全文获取 / PDF 下载":
         st.info(ft_message)
         st.session_state["upload_message"] = ""
 
-    col1, col2, col3, col4, col5 = st.columns(5)
-    with col1:
-        st.metric("论文总数", stats.get("total_papers", 0))
-    with col2:
-        st.metric("已有 PDF", stats.get("with_pdf", 0))
-    with col3:
-        st.metric("待获取", stats.get("without_pdf", 0))
-    with col4:
-        st.metric("需人工审查", stats.get("manual_review", 0))
-    with col5:
-        st.metric("失败", stats.get("failed", 0))
+    render_fulltext_stats(stats)
 
     st.divider()
 
@@ -866,9 +842,8 @@ elif page == "全文获取 / PDF 下载":
                 "下载状态": p.get("download_status", "pending"),
             })
 
-        st.dataframe(
+        render_paper_table(
             pending_data,
-            use_container_width=True,
             column_config={
                 "ID": st.column_config.NumberColumn(width="small"),
                 "标题": st.column_config.TextColumn(width="large"),
@@ -970,7 +945,7 @@ elif page == "全文获取 / PDF 下载":
                     st.error(f"批量获取失败: {e}")
                     status.update(label="批量获取失败", state="error")
     else:
-        st.info("所有论文均已有 PDF，无需获取。")
+        render_empty_state("全文获取完成", "所有论文均已有 PDF，无需获取。", icon="✅")
 
     st.divider()
 
@@ -1069,10 +1044,9 @@ elif page == "全文获取 / PDF 下载":
 
 # --- PDF 转换 ---
 elif page == "PDF 转换":
-    st.title("PDF 转 Markdown")
-    st.markdown("将学术 PDF 论文转换为结构化 Markdown。")
+    render_page_header("PDF 转 Markdown", "将学术 PDF 论文转换为结构化 Markdown。")
 
-    pop_page_message()
+    render_page_message()
     st.info("PDF 转换功能将在 Phase 2 中实现。转换引擎支持 marker, pymupdf, nougat。")
 
     uploaded_pdf = st.file_uploader("上传 PDF 文件", type=["pdf"], key=ui_key("pdf_convert", "upload_file"))
@@ -1081,10 +1055,9 @@ elif page == "PDF 转换":
 
 # --- RAG 智能问答 ---
 elif page == "RAG 智能问答":
-    st.title("RAG 智能问答")
-    st.markdown("基于本地文献库的检索增强生成问答。")
+    render_page_header("RAG 智能问答", "基于本地文献库的检索增强生成问答。")
 
-    pop_page_message()
+    render_page_message()
     st.info("RAG 问答功能将在 Phase 2 中实现。回答将基于本地已入库文献生成。")
 
     question = st.text_area(
@@ -1101,10 +1074,9 @@ elif page == "RAG 智能问答":
 
 # --- 课题组画像 ---
 elif page == "课题组画像":
-    st.title("课题组画像")
-    st.markdown("分析课题组已发表论文，生成研究方向画像。")
+    render_page_header("课题组画像", "分析课题组已发表论文，生成研究方向画像。")
 
-    pop_page_message()
+    render_page_message()
     st.info("课题组画像功能将在 Phase 3 中实现。")
     st.markdown("""
     #### 即将支持的功能
@@ -1116,10 +1088,9 @@ elif page == "课题组画像":
 
 # --- 写作辅助 ---
 elif page == "写作辅助":
-    st.title("写作辅助")
-    st.markdown("中文学术写作助手，辅助撰写文献综述、基金申请书和学术论文。")
+    render_page_header("写作辅助", "中文学术写作助手，辅助撰写文献综述、基金申请书和学术论文。")
 
-    pop_page_message()
+    render_page_message()
     st.info("写作辅助功能将在 Phase 3 中实现。")
 
     writing_type = st.selectbox(
@@ -1141,10 +1112,9 @@ elif page == "写作辅助":
 
 # --- 系统设置 ---
 elif page == "系统设置":
-    st.title("系统设置")
-    st.markdown("配置系统参数和 API 密钥。")
+    render_page_header("系统设置", "配置系统参数和 API 密钥。")
 
-    pop_page_message()
+    render_page_message()
 
     tab1, tab2, tab3 = st.tabs(["API 配置", "系统参数", "关于"], key=ui_key("settings", "tabs"))
 
