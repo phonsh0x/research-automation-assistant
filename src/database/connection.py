@@ -120,6 +120,7 @@ class DatabaseManager:
             try:
                 self._create_tables(conn)
                 self._apply_migrations(conn)
+                self._seed_default_data(conn)
                 conn.commit()
                 self._initialized = True
                 logger.info("数据库初始化完成。")
@@ -140,6 +141,44 @@ class DatabaseManager:
             if statement:
                 logger.debug(f"执行 DDL: {statement[:80]}...")
                 cursor.execute(statement)
+
+    def _seed_default_data(self, conn: sqlite3.Connection) -> None:
+        """数据库初始化后插入默认数据（如默认期刊清单）。"""
+        cursor = conn.cursor()
+
+        # 检查 journal_watchlist 是否为空
+        cursor.execute("SELECT COUNT(*) FROM journal_watchlist")
+        count = cursor.fetchone()[0]
+        if count > 0:
+            logger.debug(f"journal_watchlist 已有 {count} 条记录，跳过默认数据插入。")
+            return
+
+        logger.info("插入默认期刊监控清单...")
+        default_journals = [
+            ("Nature", "0028-0836", "1476-4687", "https://www.nature.com/nature.rss", "综合科学", 10),
+            ("Science", "0036-8075", "1095-9203", "https://www.science.org/rss/express.xml", "综合科学", 10),
+            ("Cell", "0092-8674", "1097-4172", "https://www.cell.com/cell/inpress.rss", "生命科学", 10),
+            ("PNAS", "0027-8424", "1091-6490", "https://www.pnas.org/action/showFeed?type=etoc&feed=rss", "综合科学", 9),
+            ("Journal of Medicinal Chemistry", "0022-2623", "1520-4804", "https://pubs.acs.org/action/showFeed?type=etoc&feed=rss&jc=jmcmar", "药物化学", 9),
+            ("ACS Medicinal Chemistry Letters", "1948-5875", "1948-5875", "https://pubs.acs.org/action/showFeed?type=etoc&feed=rss&jc=amclct", "药物化学", 8),
+            ("JACS", "0002-7863", "1520-5126", "https://pubs.acs.org/action/showFeed?type=etoc&feed=rss&jc=jacsat", "化学", 8),
+            ("Organic Letters", "1523-7060", "1523-7052", "https://pubs.acs.org/action/showFeed?type=etoc&feed=rss&jc=orlef7", "有机化学", 8),
+            ("The Journal of Organic Chemistry", "0022-3263", "1520-6904", "https://pubs.acs.org/action/showFeed?type=etoc&feed=rss&jc=joceah", "有机化学", 8),
+            ("Acta Pharmaceutica Sinica B", "2211-3835", "2211-3843", "https://www.sciencedirect.com/science/journal/22113835", "药物化学", 8),
+            ("European Journal of Medicinal Chemistry", "0223-5234", "1768-3254", "https://www.sciencedirect.com/science/journal/02235234", "药物化学", 8),
+            ("Cell Chemical Biology", "2451-9456", "2451-9448", "https://www.cell.com/cell-chemical-biology/inpress.rss", "化学生物学", 8),
+            ("Nature Chemical Biology", "1552-4450", "1552-4469", "https://www.nature.com/nchembio.rss", "化学生物学", 8),
+            ("Nature Chemistry", "1755-4330", "1755-4349", "https://www.nature.com/nchem.rss", "化学", 8),
+            ("Science Translational Medicine", "1946-6234", "1946-6242", "https://www.science.org/rss/stm_express.xml", "转化医学", 7),
+            ("Science Advances", "2375-2548", "2375-2548", "https://www.science.org/rss/sciadv_express.xml", "综合科学", 8),
+        ]
+        for name, issn, eissn, rss_url, category, priority in default_journals:
+            cursor.execute(
+                "INSERT OR IGNORE INTO journal_watchlist (name, issn, eissn, rss_url, category, priority) "
+                "VALUES (?, ?, ?, ?, ?, ?)",
+                (name, issn, eissn, rss_url, category, priority),
+            )
+        logger.info(f"已插入 {len(default_journals)} 个默认期刊。")
 
     def _apply_migrations(self, conn: sqlite3.Connection) -> None:
         """
@@ -337,6 +376,39 @@ def _get_ddl() -> list[str]:
         )
         """,
 
+        # --- 期刊监控清单 ---
+        """
+        CREATE TABLE IF NOT EXISTS journal_watchlist (
+            journal_id    INTEGER PRIMARY KEY AUTOINCREMENT,
+            name          TEXT NOT NULL UNIQUE,
+            issn          TEXT,
+            eissn         TEXT,
+            rss_url       TEXT,
+            category      TEXT,
+            priority      INTEGER DEFAULT 5,
+            is_active     INTEGER DEFAULT 1,
+            created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+        """,
+
+        # --- 检索运行记录 ---
+        """
+        CREATE TABLE IF NOT EXISTS search_runs (
+            run_id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_type        TEXT NOT NULL,
+            sources_used    TEXT,
+            query_keywords  TEXT,
+            total_found     INTEGER DEFAULT 0,
+            new_added       INTEGER DEFAULT 0,
+            updated_count   INTEGER DEFAULT 0,
+            duplicate_count INTEGER DEFAULT 0,
+            failed_count    INTEGER DEFAULT 0,
+            errors          TEXT,
+            started_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            finished_at     TIMESTAMP
+        )
+        """,
+
         # --- 索引 ---
         """CREATE INDEX IF NOT EXISTS idx_papers_doi       ON papers(doi)""",
         """CREATE INDEX IF NOT EXISTS idx_papers_year      ON papers(year)""",
@@ -348,6 +420,8 @@ def _get_ddl() -> list[str]:
         """CREATE INDEX IF NOT EXISTS idx_keywords_kw      ON keywords(keyword)""",
         """CREATE INDEX IF NOT EXISTS idx_embeddings_paper ON embeddings(paper_id)""",
         """CREATE INDEX IF NOT EXISTS idx_full_texts_ft    ON full_texts(content)""",
+        """CREATE INDEX IF NOT EXISTS idx_search_runs_type ON search_runs(run_type)""",
+        """CREATE INDEX IF NOT EXISTS idx_journal_wl_active ON journal_watchlist(is_active)""",
 
         # --- 视图 ---
         """

@@ -64,6 +64,280 @@ with st.sidebar:
 
 
 # ============================================================================
+# 文献检索辅助函数（定义在模块级别，页面路由之前）
+# ============================================================================
+
+def _render_keyword_search():
+    """渲染关键词检索页面。"""
+    # 药物化学关键词模板
+    with st.expander("药物化学关键词模板（点击展开）"):
+        col_t1, col_t2, col_t3 = st.columns(3)
+        templates = {
+            "靶向蛋白降解 (PROTAC/分子胶)": 'PROTAC OR "molecular glue" OR "targeted protein degradation"',
+            "共价抑制剂": '"covalent inhibitor" OR "irreversible inhibitor" OR "targeted covalent inhibitor"',
+            "变构调节剂": '"allosteric modulator" OR "allosteric inhibitor" OR "allosteric regulation"',
+            "AI 驱动的药物发现": '"AI-driven drug discovery" OR "machine learning drug design" OR "deep learning drug discovery"',
+            "基于片段的药物设计 FBDD": '"fragment-based drug design" OR FBDD OR "fragment screening"',
+            "抗肿瘤药物": 'anticancer OR antitumor OR "cancer drug discovery"',
+            "天然产物药物化学": '"natural product" AND "drug discovery" OR "natural product chemistry"',
+            "先导化合物优化": '"lead optimization" OR "lead compound" AND "medicinal chemistry"',
+        }
+        with col_t1:
+            for i, (label, template) in enumerate(list(templates.items())[:3]):
+                if st.button(label, key=f"tpl_{i}", use_container_width=True):
+                    st.session_state["keywords_input"] = template
+        with col_t2:
+            for i, (label, template) in enumerate(list(templates.items())[3:6]):
+                if st.button(label, key=f"tpl_{i+3}", use_container_width=True):
+                    st.session_state["keywords_input"] = template
+        with col_t3:
+            for i, (label, template) in enumerate(list(templates.items())[6:]):
+                if st.button(label, key=f"tpl_{i+6}", use_container_width=True):
+                    st.session_state["keywords_input"] = template
+
+    # 检索参数
+    col1, col2 = st.columns([3, 1])
+    with col1:
+        if "keywords_input" not in st.session_state:
+            st.session_state["keywords_input"] = ""
+        keywords = st.text_input(
+            "检索关键词",
+            value=st.session_state["keywords_input"],
+            placeholder="例如: deep learning medical image segmentation",
+            key="kw_input",
+        )
+    with col2:
+        max_results = st.number_input("最大结果数", min_value=5, max_value=100, value=20, step=5)
+
+    col3, col4, col5 = st.columns(3)
+    with col3:
+        year_from = st.number_input("起始年份", min_value=1900, max_value=2030, value=2020)
+    with col4:
+        year_to = st.number_input("结束年份", min_value=1900, max_value=2030, value=2026)
+    with col5:
+        sources = st.multiselect(
+            "数据源",
+            options=["openalex", "crossref", "pubmed", "europe_pmc"],
+            default=["openalex"],
+        )
+
+    # 进阶选项
+    with st.expander("进阶选项"):
+        col_a, col_b = st.columns(2)
+        with col_a:
+            nsc_boost = st.checkbox(
+                "顶刊强化 (Nature/Science/Cell/PNAS)",
+                value=False,
+                help="开启后在关键词中追加 AND (Nature OR Science OR Cell OR PNAS) 过滤",
+            )
+            oa_only = st.checkbox("仅 OA 文献", value=False)
+        with col_b:
+            sort_by = st.selectbox(
+                "排序方式",
+                options=["relevance", "year", "citations"],
+                index=0,
+                format_func=lambda x: {"relevance": "相关度", "year": "年份", "citations": "引用数"}[x],
+            )
+            search_mode_sel = st.selectbox(
+                "检索策略",
+                options=["backfill", "daily_watch"],
+                index=0,
+                format_func=lambda x: {"backfill": "批量回填 (优先 OpenAlex)", "daily_watch": "日常监控 (优先 Crossref/PubMed)"}[x],
+            )
+
+    if st.button("开始检索 (关键词)", type="primary", use_container_width=True):
+        if not keywords:
+            st.warning("请输入检索关键词。")
+        else:
+            _execute_search(keywords, sources, year_from, year_to, max_results, sort_by, oa_only, nsc_boost, search_mode_sel)
+
+
+def _execute_search(keywords, sources, year_from, year_to, max_results, sort_by, oa_only, nsc_boost, search_mode):
+    """执行文献检索并展示结果。"""
+    from src.paper_search.models import SearchQuery
+    from src.paper_search.searcher import PaperSearcher
+
+    # 顶刊强化
+    final_keywords = keywords
+    if nsc_boost:
+        final_keywords = f"({keywords}) AND (Nature OR Science OR Cell OR PNAS)"
+
+    query = SearchQuery(
+        keywords=final_keywords,
+        max_results=max_results,
+        year_from=year_from if year_from > 1900 else None,
+        year_to=year_to if year_to < 2030 else None,
+        sources=sources,
+        sort_by=sort_by,
+        filter_oa_only=oa_only,
+    )
+
+    with st.status(f"正在检索: '{final_keywords}' ...", expanded=True) as status:
+        st.write(f"关键词: {final_keywords}")
+        st.write(f"数据源: {', '.join(sources)}")
+        st.write(f"年份: {year_from} - {year_to}")
+        st.write(f"排序: {sort_by}")
+
+        try:
+            searcher = PaperSearcher()
+            result = searcher.search(query)
+            status.update(label=f"检索完成，找到 {result.total_count} 篇论文", state="complete")
+
+            if result.errors:
+                for err in result.errors:
+                    st.warning(err)
+
+        except Exception as e:
+            status.update(label="检索失败", state="error")
+            st.error(f"检索过程中发生错误: {e}")
+            return
+
+    # 展示结果
+    if result.papers:
+        st.success(f"共找到 {result.total_count} 篇论文，显示 {len(result.papers)} 条")
+
+        # 统计信息
+        col_s1, col_s2, col_s3, col_s4 = st.columns(4)
+        oa_count = len([p for p in result.papers if p.oa_status in ("gold", "green", "hybrid", "bronze")])
+        with col_s1:
+            st.metric("总计", len(result.papers))
+        with col_s2:
+            st.metric("OA 可获取", oa_count)
+        with col_s3:
+            valid_years = [p.year for p in result.papers if p.year]
+            avg_year = sum(valid_years) / max(len(valid_years), 1)
+            st.metric("平均年份", f"{avg_year:.1f}")
+        with col_s4:
+            cited = len([p for p in result.papers if p.citation_count > 0])
+            st.metric("有引用", cited)
+
+        # 表格
+        table_data = []
+        for i, paper in enumerate(result.papers, start=1):
+            authors_str = ", ".join(paper.authors[:3])
+            if len(paper.authors) > 3:
+                authors_str += " 等"
+            table_data.append({
+                "序号": i,
+                "标题": paper.title[:100] + "..." if len(paper.title) > 100 else paper.title,
+                "第一作者": paper.authors[0] if paper.authors else "未知",
+                "年份": paper.year if paper.year else "未知",
+                "期刊": paper.journal if paper.journal else "未知",
+                "OA": paper.oa_status,
+                "引用": paper.citation_count,
+                "来源": paper.source_api,
+            })
+
+        st.dataframe(
+            table_data,
+            use_container_width=True,
+            column_config={
+                "序号": st.column_config.NumberColumn(width="small"),
+                "标题": st.column_config.TextColumn(width="large"),
+                "OA": st.column_config.TextColumn(width="small"),
+                "引用": st.column_config.NumberColumn(width="small"),
+            },
+        )
+    else:
+        st.info("未找到匹配的论文。请尝试调整关键词或放宽条件。")
+
+
+def _render_journal_watch():
+    """渲染重点期刊监控页面。"""
+    from src.paper_search.journal_watchlist import JournalWatchlist
+
+    wl = JournalWatchlist()
+
+    # 期刊清单
+    with st.expander("监控期刊清单", expanded=True):
+        journals = wl.get_journals(active_only=False)
+        if journals:
+            journal_data = []
+            for j in journals:
+                journal_data.append({
+                    "期刊": j.get("name", ""),
+                    "ISSN": j.get("issn") or j.get("eissn") or "",
+                    "分类": j.get("category", ""),
+                    "优先级": j.get("priority", 5),
+                    "状态": "活跃" if j.get("is_active") else "停用",
+                    "RSS": "有" if j.get("rss_url") else "无",
+                })
+            st.dataframe(journal_data, use_container_width=True)
+        else:
+            st.warning("期刊清单为空，请先初始化数据库。")
+
+    # 监控设置
+    st.divider()
+    col_d1, col_d2 = st.columns([2, 1])
+    with col_d1:
+        days = st.selectbox("监控最近天数", options=[1, 3, 7, 14, 30], index=2)
+    with col_d2:
+        active_only = st.checkbox("仅活跃期刊", value=True)
+
+    if st.button("开始监控 (期刊)", type="primary", use_container_width=True):
+        _execute_journal_watch(wl, days, active_only)
+
+
+def _execute_journal_watch(wl, days, active_only):
+    """执行期刊监控并展示结果。"""
+    from src.paper_search.rss_watcher import run_rss_watch
+    from src.paper_search.aggregator import SearchAggregator
+    from src.paper_search.openalex import OpenAlexSearcher
+    from src.storage.repository import PaperRepository
+
+    journals = wl.get_journals(active_only=active_only)
+    rss_urls = [j["rss_url"] for j in journals if j.get("rss_url")]
+    journal_names = [j["name"] for j in journals if j.get("rss_url")]
+
+    with st.status(f"期刊监控中（最近 {days} 天）...", expanded=True) as status:
+        all_papers = []
+
+        # 1. RSS 抓取
+        if rss_urls:
+            st.write(f"正在抓取 {len(rss_urls)} 个 RSS 源...")
+            try:
+                rss_papers = run_rss_watch(rss_urls, journal_names, days=days)
+                st.write(f"RSS 获取: {len(rss_papers)} 篇")
+                all_papers.extend(rss_papers)
+            except Exception as e:
+                st.warning(f"RSS 抓取异常: {e}")
+
+        # 2. API 补充检索
+        search_journals = [j["name"] for j in journals if not j.get("rss_url")]
+        if search_journals:
+            st.write(f"正在通过 API 检索 {len(search_journals)} 个期刊...")
+            searcher = OpenAlexSearcher()
+            for jname in search_journals[:5]:
+                try:
+                    papers = searcher.get_recent(jname, days=days)
+                    all_papers.extend(papers)
+                except Exception as e:
+                    st.warning(f"检索 {jname} 失败: {e}")
+
+        # 3. 去重 & 入库
+        if all_papers:
+            agg = SearchAggregator(searchers=[], repository=PaperRepository())
+            deduped = agg.deduplicate(all_papers)
+            st.write(f"去重后: {len(deduped)} 篇")
+            new_count = agg.save_results(deduped)
+            st.write(f"新增入库: {new_count} 篇")
+
+            agg.record_search_run(
+                run_type="daily_watch",
+                sources=["rss", "openalex"],
+                keywords=f"期刊监控 ({days}天)",
+                total_found=len(deduped),
+                new_added=new_count,
+            )
+
+            status.update(label=f"监控完成，共 {len(deduped)} 篇（新增 {new_count} 篇）", state="complete")
+            st.success(f"共发现 {len(deduped)} 篇新论文，其中 {new_count} 篇已入库。")
+        else:
+            status.update(label="监控完成，未发现新论文", state="complete")
+            st.info("最近未发现新论文。")
+
+
+# ============================================================================
 # 页面路由
 # ============================================================================
 
@@ -116,38 +390,17 @@ elif page == "文献检索":
     st.title("文献检索")
     st.markdown("通过合法开放 API 检索学术论文。")
 
-    col1, col2 = st.columns([3, 1])
+    # 检索模式选择
+    search_mode = st.radio(
+        "检索模式",
+        options=["按关键词检索", "重点期刊监控"],
+        horizontal=True,
+    )
 
-    with col1:
-        keywords = st.text_input(
-            "检索关键词",
-            placeholder="例如: deep learning medical image segmentation",
-        )
-    with col2:
-        max_results = st.number_input("最大结果数", min_value=5, max_value=100, value=20, step=5)
-
-    col3, col4, col5 = st.columns(3)
-    with col3:
-        year_from = st.number_input("起始年份", min_value=1900, max_value=2030, value=2020)
-    with col4:
-        year_to = st.number_input("结束年份", min_value=1900, max_value=2030, value=2025)
-    with col5:
-        sources = st.multiselect(
-            "数据源",
-            options=["openalex", "crossref", "pubmed", "arxiv", "semantic_scholar"],
-            default=["openalex"],
-        )
-
-    if st.button("开始检索", type="primary"):
-        if not keywords:
-            st.warning("请输入检索关键词。")
-        else:
-            st.info("检索功能框架已就绪。具体检索逻辑将在 Phase 1 实现中逐步添加。")
-            st.info(f"查询参数: keywords='{keywords}', sources={sources}, year={year_from}-{year_to}, max={max_results}")
-
-    st.divider()
-    st.caption("支持的数据源: OpenAlex, Crossref, PubMed, arXiv, Semantic Scholar（通过 Unpaywall 确定 OA 状态）")
-
+    if search_mode == "按关键词检索":
+        _render_keyword_search()
+    else:
+        _render_journal_watch()
 # --- 我的文献库 ---
 elif page == "我的文献库":
     st.title("我的文献库")
