@@ -142,7 +142,8 @@ async def search_papers(request: dict):
         "keywords": "deep learning medical imaging",
         "max_results": 20,
         "year_from": 2020,
-        "year_to": 2025
+        "year_to": 2025,
+        "sources": ["openalex", "crossref"]
     }
     """
     keywords = request.get("keywords", "")
@@ -151,13 +152,190 @@ async def search_papers(request: dict):
 
     logger.info(f"API 检索请求: {keywords}")
 
-    # Phase 1 占位
-    return {
-        "query": keywords,
-        "total": 0,
-        "papers": [],
-        "message": "检索接口框架已就绪，具体检索逻辑将在 Phase 1 中实现。",
-    }
+    try:
+        from src.paper_search.models import SearchQuery
+        from src.paper_search.searcher import PaperSearcher
+
+        query = SearchQuery(
+            keywords=keywords,
+            max_results=request.get("max_results", 20),
+            year_from=request.get("year_from"),
+            year_to=request.get("year_to"),
+            sources=request.get("sources", ["openalex"]),
+            sort_by=request.get("sort_by", "relevance"),
+            filter_oa_only=request.get("filter_oa_only", False),
+        )
+
+        searcher = PaperSearcher()
+        result = searcher.search(query)
+
+        return {
+            "query": keywords,
+            "total": result.total_count,
+            "papers": [
+                {
+                    "title": p.title,
+                    "authors": p.authors,
+                    "doi": p.doi,
+                    "year": p.year,
+                    "journal": p.journal,
+                    "abstract": (p.abstract or "")[:500],
+                    "oa_status": p.oa_status,
+                    "citation_count": p.citation_count,
+                    "source": p.source_api,
+                }
+                for p in result.papers
+            ],
+            "errors": result.errors,
+        }
+    except Exception as e:
+        logger.error(f"检索失败: {e}")
+        return {"error": str(e)}
+
+
+# ============================================================================
+# 全文获取
+# ============================================================================
+
+@app.get("/api/v1/fulltext/stats")
+async def fulltext_stats():
+    """获取全文下载统计信息。"""
+    try:
+        from src.storage.repository import PaperRepository
+        repo = PaperRepository()
+        return repo.get_download_statistics()
+    except Exception as e:
+        logger.error(f"获取全文统计失败: {e}")
+        return {"error": str(e)}
+
+
+@app.get("/api/v1/fulltext/pending")
+async def fulltext_pending(limit: int = 20):
+    """获取尚未下载 PDF 的论文列表。"""
+    try:
+        from src.storage.repository import PaperRepository
+        repo = PaperRepository()
+        papers = repo.get_papers_without_pdf(limit=limit)
+        return {
+            "count": len(papers),
+            "papers": papers,
+        }
+    except Exception as e:
+        logger.error(f"获取待下载论文失败: {e}")
+        return {"error": str(e)}
+
+
+@app.post("/api/v1/fulltext/resolve/{paper_id}")
+async def fulltext_resolve(paper_id: int):
+    """查询合法全文来源。"""
+    try:
+        from src.fulltext.service import FullTextAcquisitionService
+
+        service = FullTextAcquisitionService()
+        result = service.resolve(paper_id)
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"全文解析失败: paper_id={paper_id}, 原因={e}")
+        return {"error": str(e)}
+
+
+@app.post("/api/v1/fulltext/download/{paper_id}")
+async def fulltext_download(paper_id: int, request: dict = None):
+    """尝试下载合法 PDF。"""
+    try:
+        from src.fulltext.service import FullTextAcquisitionService
+
+        service = FullTextAcquisitionService()
+        result = service.download(paper_id)
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"全文下载失败: paper_id={paper_id}, 原因={e}")
+        return {"error": str(e)}
+
+
+@app.post("/api/v1/fulltext/institution/download/{paper_id}")
+async def fulltext_institution_download(paper_id: int, request: dict):
+    """通过校园网授权访问下载 PDF。要求 user_confirmed_authorization=true。"""
+    if not request or not request.get("user_confirmed_authorization"):
+        return {"success": False, "error": "需要确认已具备机构授权"}
+
+    try:
+        from src.fulltext.service import FullTextAcquisitionService
+
+        service = FullTextAcquisitionService()
+        result = service.download(paper_id, user_confirmed_institution=True)
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"机构访问下载失败: paper_id={paper_id}, 原因={e}")
+        return {"error": str(e)}
+
+
+@app.post("/api/v1/fulltext/manual-review/{paper_id}")
+async def fulltext_mark_manual_review(paper_id: int, request: dict = None):
+    """标记为 manual_review。"""
+    reason = request.get("reason", "") if request else ""
+    try:
+        from src.storage.repository import PaperRepository
+        repo = PaperRepository()
+        success = repo.mark_manual_review(paper_id, reason)
+        return {
+            "paper_id": paper_id,
+            "success": success,
+            "message": "已标记为人工审查" if success else "更新失败（论文不存在？）",
+        }
+    except Exception as e:
+        logger.error(f"标记人工审查失败: paper_id={paper_id}, 原因={e}")
+        return {"error": str(e)}
+
+
+@app.post("/api/v1/fulltext/manual-upload/{paper_id}")
+async def fulltext_manual_upload(paper_id: int, request: dict = None):
+    """处理用户手动上传的 PDF 文件。"""
+    pdf_path = request.get("pdf_path", "") if request else ""
+    user_confirmed_rights = request.get("user_confirmed_rights", False) if request else False
+
+    try:
+        from src.fulltext.manual_upload import ManualUploadResolver
+        from src.storage.repository import PaperRepository
+
+        repo = PaperRepository()
+        paper = repo.get_paper_by_id(paper_id)
+        if not paper:
+            return {"error": f"论文 ID {paper_id} 不存在"}
+
+        if not pdf_path:
+            return {"error": "pdf_path 参数为必填项"}
+
+        resolver = ManualUploadResolver()
+        result = resolver.upload(paper, pdf_path, user_confirmed_rights=user_confirmed_rights)
+
+        if result.pdf_path:
+            repo.update_paper_pdf_status(
+                paper_id=paper_id,
+                pdf_path=result.pdf_path,
+                download_status="downloaded",
+                access_source="manual_upload",
+                legal_status=result.legal_status,
+            )
+            repo.record_fulltext_access(
+                paper_id=paper_id,
+                doi=paper.get("doi", ""),
+                title=paper.get("title", ""),
+                access_status="manual_upload",
+                access_source="manual_upload",
+                access_mode="manual",
+                legal_status=result.legal_status,
+                pdf_path=result.pdf_path,
+                file_size=result.file_size,
+                checksum_sha256=result.checksum_sha256,
+                risk_level=result.risk_level,
+                risk_note=result.risk_note,
+            )
+
+        return result.to_dict()
+    except Exception as e:
+        logger.error(f"人工上传处理失败: paper_id={paper_id}, 原因={e}")
+        return {"error": str(e)}
 
 
 # ============================================================================

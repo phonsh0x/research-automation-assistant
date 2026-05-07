@@ -49,6 +49,7 @@ with st.sidebar:
             "首页 — 系统概览",
             "文献检索",
             "我的文献库",
+            "全文获取 / PDF 下载",
             "PDF 转换",
             "RAG 智能问答",
             "课题组画像",
@@ -428,6 +429,270 @@ elif page == "我的文献库":
         export_format = st.selectbox("导出格式", ["BibTeX", "CSV", "JSON"])
         if st.button("导出全部论文"):
             st.info(f"{export_format} 导出功能将在 Phase 1 中实现。")
+
+# --- 全文获取 / PDF 下载 ---
+elif page == "全文获取 / PDF 下载":
+    st.title("全文获取 / PDF 下载")
+    st.markdown("通过合法开放 API 获取学术论文 PDF 全文。")
+
+    # 统计卡片
+    try:
+        from src.storage.repository import PaperRepository
+        repo = PaperRepository()
+        stats = repo.get_download_statistics()
+    except Exception:
+        stats = {}
+
+    col1, col2, col3, col4, col5 = st.columns(5)
+    with col1:
+        st.metric("论文总数", stats.get("total_papers", 0))
+    with col2:
+        st.metric("已有 PDF", stats.get("with_pdf", 0))
+    with col3:
+        st.metric("待获取", stats.get("without_pdf", 0))
+    with col4:
+        st.metric("需人工审查", stats.get("manual_review", 0))
+    with col5:
+        st.metric("失败", stats.get("failed", 0))
+
+    st.divider()
+
+    # 来源分布和法律状态
+    col_a, col_b = st.columns(2)
+    with col_a:
+        st.markdown("#### 按来源分布")
+        by_source = stats.get("by_source", {})
+        if by_source:
+            st.dataframe(
+                [{"来源": k, "数量": v} for k, v in by_source.items()],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.caption("暂无数据")
+    with col_b:
+        st.markdown("#### 按法律状态分布")
+        by_legal = stats.get("by_legal_status", {})
+        if by_legal:
+            st.dataframe(
+                [{"法律状态": k, "数量": v} for k, v in by_legal.items()],
+                use_container_width=True,
+                hide_index=True,
+            )
+        else:
+            st.caption("暂无数据")
+
+    st.divider()
+
+    # 待下载论文列表
+    st.markdown("### 待获取全文的论文")
+
+    col_f1, col_f2, col_f3 = st.columns([2, 1, 1])
+    with col_f1:
+        pending_limit = st.selectbox("显示数量", options=[10, 20, 50, 100], index=1)
+    with col_f2:
+        st.caption("")
+        st.caption("")
+        refresh_btn = st.button("刷新列表", use_container_width=True)
+    with col_f3:
+        st.caption("")
+        st.caption("")
+        batch_download_btn = st.button("批量获取 (前10篇)", type="primary", use_container_width=True)
+
+    try:
+        repo2 = PaperRepository()
+        pending_papers = repo2.get_papers_without_pdf(limit=pending_limit)
+    except Exception:
+        pending_papers = []
+
+    if pending_papers:
+        pending_data = []
+        for p in pending_papers:
+            doi = p.get("doi") or ""
+            pending_data.append({
+                "ID": p.get("paper_id", ""),
+                "标题": (p.get("title") or "无标题")[:80],
+                "DOI": doi[:40],
+                "年份": p.get("year") or "",
+                "期刊": (p.get("journal") or "")[:30],
+                "OA状态": p.get("oa_status", "unknown"),
+                "下载状态": p.get("download_status", "pending"),
+            })
+
+        st.dataframe(
+            pending_data,
+            use_container_width=True,
+            column_config={
+                "ID": st.column_config.NumberColumn(width="small"),
+                "标题": st.column_config.TextColumn(width="large"),
+                "DOI": st.column_config.TextColumn(width="medium"),
+                "OA状态": st.column_config.TextColumn(width="small"),
+            },
+        )
+
+        # 单篇操作
+        st.markdown("#### 单篇操作")
+        col_op1, col_op2, col_op3 = st.columns([1, 1, 2])
+        with col_op1:
+            target_paper_id = st.number_input("论文 ID", min_value=1, step=1, value=1)
+        with col_op2:
+            st.caption("")
+            resolve_btn = st.button("查询来源", use_container_width=True)
+        with col_op3:
+            st.caption("")
+            col_dl, col_mr = st.columns(2)
+            with col_dl:
+                download_btn = st.button("下载全文", type="primary", use_container_width=True)
+            with col_mr:
+                mark_review_btn = st.button("标记人工审查", use_container_width=True)
+
+        if resolve_btn:
+            with st.status(f"正在查询论文 {target_paper_id} 的全文来源...", expanded=True) as status:
+                try:
+                    from src.fulltext.service import FullTextAcquisitionService
+                    service = FullTextAcquisitionService()
+                    result = service.resolve(target_paper_id)
+                    if result.pdf_url:
+                        st.success(f"找到可用来源: {result.source} — {result.pdf_url[:100]}...")
+                    else:
+                        st.warning(f"未找到可用全文: {result.error_message or '所有来源均不可用'}")
+                    status.update(label="查询完成", state="complete")
+                except Exception as e:
+                    st.error(f"查询失败: {e}")
+                    status.update(label="查询失败", state="error")
+
+        if download_btn:
+            with st.status(f"正在获取论文 {target_paper_id} 全文...", expanded=True) as status:
+                try:
+                    from src.fulltext.service import FullTextAcquisitionService
+                    service = FullTextAcquisitionService()
+                    result = service.download(target_paper_id)
+                    if result.pdf_path:
+                        st.success(f"PDF 下载成功: {result.pdf_path} ({result.file_size} 字节)")
+                        status.update(label="下载完成", state="complete")
+                    else:
+                        st.warning(f"获取失败: {result.error_message}")
+                        status.update(label="获取失败", state="error")
+                except Exception as e:
+                    st.error(f"下载失败: {e}")
+                    status.update(label="失败", state="error")
+
+        if mark_review_btn:
+            try:
+                success = repo2.mark_manual_review(target_paper_id, "用户在 UI 中标记为需人工审查")
+                if success:
+                    st.success(f"论文 {target_paper_id} 已标记为人工审查")
+                else:
+                    st.error(f"更新失败")
+            except Exception as e:
+                st.error(f"操作失败: {e}")
+
+        if batch_download_btn:
+            with st.status("正在批量获取全文...", expanded=True) as status:
+                try:
+                    from src.fulltext.service import FullTextAcquisitionService
+                    service = FullTextAcquisitionService()
+                    pending_ids = [p["paper_id"] for p in pending_papers[:10]]
+                    results = service.batch_download(pending_ids)
+                    success_count = len([r for r in results if r.pdf_path])
+                    st.write(f"批量获取完成: 成功 {success_count}/{len(results)}")
+                    for r in results:
+                        if r.pdf_path:
+                            st.write(f"- {r.paper_id}: {r.source} — 已下载")
+                        else:
+                            st.write(f"- {r.paper_id}: 失败 — {r.error_message}")
+                    status.update(label=f"批量获取完成: {success_count}/{len(results)} 成功", state="complete")
+                except Exception as e:
+                    st.error(f"批量获取失败: {e}")
+                    status.update(label="批量获取失败", state="error")
+    else:
+        st.info("所有论文均已有 PDF，无需获取。")
+
+    st.divider()
+
+    # 人工上传
+    st.markdown("### 人工上传 PDF")
+    st.caption("用于用户从机构网络或其他合法途径获得的 PDF 文件。请确认版权合规。")
+
+    col_u1, col_u2 = st.columns([1, 1])
+    with col_u1:
+        upload_paper_id = st.number_input("论文 ID（上传）", min_value=1, step=1, key="upload_pid")
+    with col_u2:
+        upload_file = st.file_uploader("选择 PDF 文件", type=["pdf"])
+
+    if upload_file and upload_paper_id:
+        if st.button("上传并关联", type="primary"):
+            try:
+                from pathlib import Path
+                import tempfile
+                from src.fulltext.manual_upload import ManualUploadResolver
+
+                paper = repo2.get_paper_by_id(upload_paper_id)
+                if not paper:
+                    st.error(f"论文 ID {upload_paper_id} 不存在")
+                else:
+                    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
+                        tmp.write(upload_file.read())
+                        tmp_path = tmp.name
+
+                    resolver = ManualUploadResolver()
+                    result = resolver.upload(paper, tmp_path, user_confirmed_rights=True)
+
+                    if result.pdf_path:
+                        repo2.update_paper_pdf_status(
+                            paper_id=upload_paper_id,
+                            pdf_path=result.pdf_path,
+                            download_status="downloaded",
+                            access_source="manual_upload",
+                            legal_status=result.legal_status,
+                        )
+                        repo2.record_fulltext_access(
+                            paper_id=upload_paper_id,
+                            doi=paper.get("doi", ""),
+                            title=paper.get("title", ""),
+                            access_status="manual_upload",
+                            access_source="manual_upload",
+                            access_mode="manual",
+                            legal_status=result.legal_status,
+                            pdf_path=result.pdf_path,
+                            file_size=result.file_size,
+                            checksum_sha256=result.checksum_sha256,
+                            risk_level=result.risk_level,
+                            risk_note=result.risk_note,
+                        )
+                        st.success(f"PDF 已上传: {result.pdf_path} ({result.file_size} 字节)")
+                        Path(tmp_path).unlink(missing_ok=True)
+                    else:
+                        st.error(f"上传失败: {result.error_message}")
+                        Path(tmp_path).unlink(missing_ok=True)
+            except Exception as e:
+                st.error(f"上传处理异常: {e}")
+
+    st.divider()
+
+    # 法律声明
+    with st.expander("法律声明"):
+        st.markdown("""
+        #### 全文获取法律合规声明
+
+        本系统仅通过以下合法途径获取论文 PDF:
+
+        | 来源 | 类型 | 法律状态 |
+        |------|------|---------|
+        | Unpaywall API | OA 元数据查询 | 合法 OA |
+        | PubMed Central | OA 全文子集 | 合法 OA |
+        | arXiv API | 预印本 | 合法 OA |
+        | 出版社 OA 接口 | 金色/混合 OA | 合法 OA |
+        | 机构网络访问 | 订阅期刊 | 合法订阅（仅限授权用户） |
+        | 人工上传 | 用户提供 | 用户负责版权合规 |
+
+        **严禁使用以下来源:**
+        - Sci-Hub 及其所有镜像站
+        - Library Genesis (LibGen)
+        - 任何绕过付费墙的盗版服务
+
+        机构订阅访问仅在检测到机构网络环境时启用，不存储任何机构凭证。
+        """)
 
 # --- PDF 转换 ---
 elif page == "PDF 转换":

@@ -507,6 +507,295 @@ class PaperRepository:
     # 全文 & 统计 & 导出
     # ==========================================================================
 
+    # ==========================================================================
+    # PDF 下载状态管理
+    # ==========================================================================
+
+    def update_paper_pdf_status(
+        self,
+        paper_id: int,
+        pdf_path: Optional[str] = None,
+        download_status: Optional[str] = None,
+        access_source: Optional[str] = None,
+        legal_status: Optional[str] = None,
+        oa_status: Optional[str] = None,
+        pdf_url: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ) -> bool:
+        """
+        更新论文的 PDF 下载状态。仅更新非 None 的字段。
+
+        Args:
+            paper_id: 论文 ID
+            pdf_path: PDF 文件本地路径
+            download_status: 下载状态（pending/downloading/downloaded/failed/manual_review）
+            access_source: 获取来源（unpaywall/openalex/pubmed/crossref/manual）
+            legal_status: 法律状态（unknown/legal_oa/legal_subscription/illegal）
+            oa_status: 开放获取状态
+            pdf_url: PDF 远端 URL
+            error_message: 错误信息
+
+        Returns:
+            是否更新成功
+        """
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+
+            # 收集所有非 None 参数
+            field_map = {
+                "pdf_path": pdf_path,
+                "download_status": download_status,
+                "access_source": access_source,
+                "legal_status": legal_status,
+                "oa_status": oa_status,
+                "pdf_url": pdf_url,
+                "error_message": error_message,
+            }
+            set_clauses = []
+            values: list = []
+            for field, value in field_map.items():
+                if value is not None:
+                    set_clauses.append(f"{field} = ?")
+                    values.append(value)
+
+            if not set_clauses:
+                logger.debug(f"update_paper_pdf_status: 无字段需要更新 (paper_id={paper_id})")
+                return True
+
+            set_clauses.append("updated_at = CURRENT_TIMESTAMP")
+            values.append(paper_id)
+
+            sql = f"UPDATE papers SET {', '.join(set_clauses)} WHERE paper_id = ?"
+            cursor.execute(sql, values)
+            conn.commit()
+
+            if cursor.rowcount > 0:
+                logger.info(f"已更新论文 PDF 状态: paper_id={paper_id}, fields={list(field_map.keys())}")
+            else:
+                logger.warning(f"更新 PDF 状态未匹配到记录: paper_id={paper_id}")
+            return cursor.rowcount > 0
+        except Exception as e:
+            logger.error(f"更新论文 PDF 状态失败 (paper_id={paper_id}): {e}")
+            return False
+        finally:
+            conn.close()
+
+    def record_fulltext_access(
+        self,
+        paper_id: int,
+        doi: Optional[str] = None,
+        title: Optional[str] = None,
+        access_status: str = "unavailable",
+        access_source: Optional[str] = None,
+        access_mode: str = "api",
+        legal_status: str = "unknown",
+        pdf_url: Optional[str] = None,
+        landing_page_url: Optional[str] = None,
+        pdf_path: Optional[str] = None,
+        file_size: int = 0,
+        checksum_sha256: Optional[str] = None,
+        content_type: Optional[str] = None,
+        risk_level: str = "low",
+        risk_note: Optional[str] = None,
+        error_message: Optional[str] = None,
+    ) -> int:
+        """
+        记录全文获取尝试，写入 fulltext_access 表。
+
+        Args:
+            paper_id: 论文 ID
+            doi: 论文 DOI
+            title: 论文标题
+            access_status: 获取状态（open_access/subscription/unavailable/error）
+            access_source: 获取来源（unpaywall/openalex/pubmed/crossref/manual）
+            access_mode: 获取方式（api/manual/browser）
+            legal_status: 法律状态（unknown/legal_oa/legal_subscription/illegal）
+            pdf_url: PDF 远端 URL
+            landing_page_url: 落地页 URL
+            pdf_path: PDF 本地路径
+            file_size: 文件大小（字节）
+            checksum_sha256: SHA-256 校验和
+            content_type: 内容类型
+            risk_level: 风险等级（low/medium/high）
+            risk_note: 风险说明
+            error_message: 错误信息
+
+        Returns:
+            fulltext_access 记录 ID，失败返回 -1
+        """
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "INSERT INTO fulltext_access ("
+                "paper_id, doi, title, access_status, access_source, access_mode, "
+                "legal_status, pdf_url, landing_page_url, pdf_path, file_size, "
+                "checksum_sha256, content_type, risk_level, risk_note, error_message"
+                ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    paper_id, doi, title, access_status, access_source, access_mode,
+                    legal_status, pdf_url, landing_page_url, pdf_path, file_size,
+                    checksum_sha256, content_type, risk_level, risk_note, error_message,
+                ),
+            )
+            conn.commit()
+            record_id = cursor.lastrowid
+            logger.info(
+                f"已记录全文获取: id={record_id}, paper_id={paper_id}, "
+                f"status={access_status}, source={access_source}"
+            )
+            return record_id
+        except Exception as e:
+            logger.error(f"记录全文获取失败 (paper_id={paper_id}): {e}")
+            return -1
+        finally:
+            conn.close()
+
+    def get_papers_without_pdf(self, limit: int = 20) -> list[dict]:
+        """
+        获取尚未下载 PDF 的论文列表。
+
+        筛选条件：pdf_path 为空 或 download_status 不是 'downloaded'。
+
+        Args:
+            limit: 返回数量上限
+
+        Returns:
+            论文字典列表，按年份降序排列
+        """
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "SELECT * FROM papers "
+                "WHERE (pdf_path IS NULL OR download_status != 'downloaded') "
+                "ORDER BY year DESC "
+                "LIMIT ?",
+                (limit,),
+            )
+            rows = cursor.fetchall()
+            return [dict(row) for row in rows]
+        except Exception as e:
+            logger.error(f"查询待下载论文失败: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def get_download_statistics(self) -> dict:
+        """
+        获取全文下载统计信息。
+
+        Returns:
+            统计字典，包含:
+            - total_papers: 论文总数
+            - with_pdf: 有 PDF 的论文数
+            - without_pdf: 无 PDF 的论文数
+            - manual_review: 需人工审查的论文数
+            - failed: 下载失败的论文数
+            - by_source: 按 access_source 分组的统计
+            - by_legal_status: 按 legal_status 分组的统计
+        """
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+
+            # 总数
+            cursor.execute("SELECT COUNT(*) FROM papers")
+            total_papers = cursor.fetchone()[0]
+
+            # 有 PDF
+            cursor.execute("SELECT COUNT(*) FROM papers WHERE pdf_path IS NOT NULL")
+            with_pdf = cursor.fetchone()[0]
+
+            # 无 PDF
+            cursor.execute("SELECT COUNT(*) FROM papers WHERE pdf_path IS NULL")
+            without_pdf = cursor.fetchone()[0]
+
+            # 需人工审查
+            cursor.execute("SELECT COUNT(*) FROM papers WHERE download_status = 'manual_review'")
+            manual_review = cursor.fetchone()[0]
+
+            # 下载失败
+            cursor.execute("SELECT COUNT(*) FROM papers WHERE download_status = 'failed'")
+            failed = cursor.fetchone()[0]
+
+            # 按来源分组
+            cursor.execute(
+                "SELECT access_source, COUNT(*) FROM papers "
+                "WHERE access_source IS NOT NULL GROUP BY access_source"
+            )
+            by_source = {row[0]: row[1] for row in cursor.fetchall()}
+
+            # 按法律状态分组
+            cursor.execute(
+                "SELECT legal_status, COUNT(*) FROM papers "
+                "WHERE legal_status IS NOT NULL GROUP BY legal_status"
+            )
+            by_legal_status = {row[0]: row[1] for row in cursor.fetchall()}
+
+            return {
+                "total_papers": total_papers,
+                "with_pdf": with_pdf,
+                "without_pdf": without_pdf,
+                "manual_review": manual_review,
+                "failed": failed,
+                "by_source": by_source,
+                "by_legal_status": by_legal_status,
+            }
+        except Exception as e:
+            logger.error(f"获取下载统计失败: {e}")
+            return {
+                "total_papers": 0,
+                "with_pdf": 0,
+                "without_pdf": 0,
+                "manual_review": 0,
+                "failed": 0,
+                "by_source": {},
+                "by_legal_status": {},
+            }
+        finally:
+            conn.close()
+
+    def mark_manual_review(self, paper_id: int, reason: str) -> bool:
+        """
+        标记论文需要人工审查。
+
+        将 download_status 设为 'manual_review'，并记录原因。
+
+        Args:
+            paper_id: 论文 ID
+            reason: 审查原因
+
+        Returns:
+            是否更新成功
+        """
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                "UPDATE papers SET download_status = 'manual_review', "
+                "error_message = ?, updated_at = CURRENT_TIMESTAMP "
+                "WHERE paper_id = ?",
+                (reason, paper_id),
+            )
+            conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(f"已标记论文为人工审查: paper_id={paper_id}, reason={reason}")
+                return True
+            else:
+                logger.warning(f"标记人工审查未匹配到记录: paper_id={paper_id}")
+                return False
+        except Exception as e:
+            logger.error(f"标记人工审查失败 (paper_id={paper_id}): {e}")
+            return False
+        finally:
+            conn.close()
+
+    # ==========================================================================
+    # 全文内容
+    # ==========================================================================
+
     def save_full_text(self, paper_id: int, content: str, stats: Optional[dict] = None) -> bool:
         """
         保存论文全文 Markdown 内容。

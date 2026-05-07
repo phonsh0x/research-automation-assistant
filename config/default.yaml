@@ -196,3 +196,42 @@ writing:
   similarity_warning: 0.8
   # 生成内容最大长度
   max_generation_length: 8192
+
+# --- 全文获取 ---
+fulltext:
+  pdf_dir: "data/pdf"
+  max_file_size_mb: 100
+  timeout_seconds: 30
+  max_retries: 3
+  retry_backoff_seconds: 3
+  user_agent: "ResearchAutomationAssistant/0.2"
+  allowed_url_schemes:
+    - "http"
+    - "https"
+
+unpaywall:
+  enabled: true
+  email: ""
+  api_url: "https://api.unpaywall.org/v2"
+
+institution_access:
+  enabled: true
+  mode: "network_authorized"
+  max_downloads_per_run: 10
+  request_interval_seconds: 8
+  timeout_seconds: 30
+  max_file_size_mb: 100
+  stop_on_403: true
+  stop_on_429: true
+  user_agent: "ResearchAutomationAssistant/0.2 institutional access"
+  require_user_confirmation: true
+
+manual_upload:
+  enabled: true
+  require_rights_confirmation: true
+
+restricted_sources:
+  enabled: false
+  block_scihub: true
+  block_libgen: true
+  block_paywall_bypass: true
