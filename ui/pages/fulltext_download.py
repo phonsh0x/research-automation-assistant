@@ -255,17 +255,30 @@ def _render_pending_papers_section() -> int | None:
         "下载状态": st.column_config.TextColumn(width="small"),
     })
 
-    # Selection
+    # Build label-to-id mapping for safe O(1) lookup
+    label_to_id: dict[str, object] = dict(zip(selection_labels, (p.get("paper_id") for p in papers)))
+
+    # Selection — guard against stale session_state values that are no
+    # longer in the current option list (e.g. after filter change).
+    options = ["—"] + selection_labels
+    current_val = st.session_state.get(KEY_FT_SELECTED_PAPER_ID)
+    default_idx = 0
+    if current_val and current_val != "—" and current_val in label_to_id:
+        try:
+            default_idx = options.index(current_val)
+        except ValueError:
+            default_idx = 0
+
     selected_label = st.selectbox(
         "选择一篇论文以查看详情和执行操作",
-        options=["—"] + selection_labels,
+        options=options,
+        index=default_idx,
         key=KEY_FT_SELECTED_PAPER_ID,
     )
 
     selected_id = None
-    if selected_label != "—":
-        idx = selection_labels.index(selected_label)
-        selected_id = papers[idx].get("paper_id")
+    if selected_label and selected_label != "—":
+        selected_id = label_to_id.get(selected_label)
 
     # Batch download
     if batch_btn:
