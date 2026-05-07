@@ -52,6 +52,23 @@ KEY_INSTITUTION_ACCESS_CONFIRMED = "institution_access_confirmed"
 KEY_UPLOAD_PAPER_ID = "upload_paper_id"
 KEY_UPLOAD_MESSAGE = "upload_message"
 
+# --- Fulltext (new namespaced keys) ---
+KEY_FT_SELECTED_PAPER_ID = "fulltext.selected_paper_id"
+KEY_FT_FILTER_KEYWORD = "fulltext.filter_keyword"
+KEY_FT_FILTER_YEAR_FROM = "fulltext.filter_year_from"
+KEY_FT_FILTER_YEAR_TO = "fulltext.filter_year_to"
+KEY_FT_FILTER_SOURCE = "fulltext.filter_source"
+KEY_FT_FILTER_ACCESS_STATUS = "fulltext.filter_access_status"
+KEY_FT_FILTER_LEGAL_STATUS = "fulltext.filter_legal_status"
+KEY_FT_LIMIT = "fulltext.limit"
+KEY_FT_PENDING_PAPERS = "fulltext.pending_papers"
+KEY_FT_CURRENT_PAPER = "fulltext.current_paper"
+KEY_FT_LAST_RESOLVE_RESULT = "fulltext.last_resolve_result"
+KEY_FT_LAST_DOWNLOAD_RESULT = "fulltext.last_download_result"
+KEY_FT_LAST_UPLOAD_RESULT = "fulltext.last_upload_result"
+KEY_FT_INSTITUTION_CONFIRMED = "fulltext.institution_confirmed"
+KEY_FT_UPLOAD_RIGHTS_CONFIRMED = "fulltext.upload_rights_confirmed"
+
 # --- Cross-page ---
 KEY_PAGE_MESSAGE = "page_message"
 
@@ -109,6 +126,21 @@ _DEFAULTS: dict[str, object] = {
     KEY_INSTITUTION_ACCESS_CONFIRMED: False,
     KEY_UPLOAD_PAPER_ID: 1,
     KEY_UPLOAD_MESSAGE: "",
+    KEY_FT_SELECTED_PAPER_ID: None,
+    KEY_FT_FILTER_KEYWORD: "",
+    KEY_FT_FILTER_YEAR_FROM: None,
+    KEY_FT_FILTER_YEAR_TO: None,
+    KEY_FT_FILTER_SOURCE: "全部",
+    KEY_FT_FILTER_ACCESS_STATUS: "全部",
+    KEY_FT_FILTER_LEGAL_STATUS: "全部",
+    KEY_FT_LIMIT: 20,
+    KEY_FT_PENDING_PAPERS: None,
+    KEY_FT_CURRENT_PAPER: None,
+    KEY_FT_LAST_RESOLVE_RESULT: None,
+    KEY_FT_LAST_DOWNLOAD_RESULT: None,
+    KEY_FT_LAST_UPLOAD_RESULT: None,
+    KEY_FT_INSTITUTION_CONFIRMED: False,
+    KEY_FT_UPLOAD_RIGHTS_CONFIRMED: False,
 
     # --- 跨页面消息 ---
     KEY_PAGE_MESSAGE: None,
@@ -143,6 +175,13 @@ def clear_fulltext_state():
     st.session_state[KEY_FULLTEXT_DOWNLOAD_RESULT] = None
     st.session_state[KEY_INSTITUTION_ACCESS_CONFIRMED] = False
     st.session_state[KEY_UPLOAD_MESSAGE] = ""
+    st.session_state[KEY_FT_SELECTED_PAPER_ID] = None
+    st.session_state[KEY_FT_CURRENT_PAPER] = None
+    st.session_state[KEY_FT_LAST_RESOLVE_RESULT] = None
+    st.session_state[KEY_FT_LAST_DOWNLOAD_RESULT] = None
+    st.session_state[KEY_FT_LAST_UPLOAD_RESULT] = None
+    st.session_state[KEY_FT_INSTITUTION_CONFIRMED] = False
+    st.session_state[KEY_FT_UPLOAD_RIGHTS_CONFIRMED] = False
 
 
 # ============================================================================
