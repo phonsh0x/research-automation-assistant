@@ -57,6 +57,27 @@ from ui.components.layout import render_page_header, render_section, render_empt
 from ui.components.metric_cards import render_database_stats, render_fulltext_stats
 from ui.components.paper_table import render_paper_table
 from ui.components.messages import render_page_message
+from ui.services.repository_service import (
+    get_db_stats,
+    get_download_stats,
+    search_library,
+    get_pending_papers,
+    get_paper_detail,
+    clear_cached_stats,
+)
+from ui.services.search_ui_service import (
+    execute_keyword_search,
+    restore_last_search,
+    execute_journal_watch,
+)
+from ui.services.fulltext_ui_service import (
+    resolve_fulltext,
+    download_fulltext,
+    batch_download_pending,
+    mark_manual_review,
+    handle_manual_upload,
+)
+from ui.services.export_service import export_bibtex
 
 # ============================================================================
 # 页面配置（必须是第一个 Streamlit 命令）
@@ -65,37 +86,6 @@ apply_page_config()
 apply_global_styles()
 
 init_session_state()
-
-
-# ============================================================================
-# 缓存资源
-# ============================================================================
-
-@st.cache_resource
-def get_cached_repository():
-    """缓存 PaperRepository 单例，避免重复初始化数据库连接。"""
-    from src.storage.repository import PaperRepository
-    return PaperRepository()
-
-
-@st.cache_data(ttl=30)
-def get_cached_download_stats():
-    """缓存全文下载统计，30 秒刷新一次。"""
-    repo = get_cached_repository()
-    return repo.get_download_statistics()
-
-
-@st.cache_data(ttl=60)
-def get_cached_db_stats():
-    """缓存数据库总体统计，60 秒刷新一次。"""
-    repo = get_cached_repository()
-    return repo.get_statistics()
-
-
-def clear_stats_cache():
-    """入库或下载后清理统计缓存。"""
-    get_cached_download_stats.clear()
-    get_cached_db_stats.clear()
 
 
 # ============================================================================
@@ -262,76 +252,56 @@ def _render_keyword_search():
 
 def _restore_last_search():
     """从 SQLite 的 search_runs 和 papers 表恢复最近一次检索结果。"""
-    repo = get_cached_repository()
-    conn = repo.db.get_connection()
-    try:
-        cursor = conn.cursor()
+    result = restore_last_search()
 
-        # 获取最近一次检索运行
-        cursor.execute(
-            "SELECT run_id, run_type, sources_used, query_keywords, total_found, "
-            "new_added, updated_count, started_at "
-            "FROM search_runs ORDER BY run_id DESC LIMIT 1"
-        )
-        run = cursor.fetchone()
+    if not result["success"]:
+        set_page_message("error", f"恢复检索结果失败: {result['error']}")
+        st.rerun()
 
-        if run:
-            run_dict = dict(run)
-            st.info(
-                f"最近检索: {run_dict['query_keywords']} "
-                f"({run_dict['started_at']}), 共 {run_dict['total_found']} 篇"
-            )
+    data = result["data"]
+    run_dict = data.get("run")
 
-            # 从 papers 表获取最近入库的论文
-            papers = repo.search_papers(keyword="", limit=50)
-            if papers:
-                st.session_state["search_results"] = papers
-                st.session_state["search_total_count"] = len(papers)
-                st.session_state["search_errors"] = []
-                st.session_state["last_search_query"] = {
-                    "keywords": run_dict["query_keywords"],
-                    "sources": run_dict["sources_used"].split(",") if run_dict.get("sources_used") else [],
-                    "year_from": None,
-                    "year_to": None,
-                    "max_results": run_dict["total_found"],
-                }
-                set_page_message(
-                    "success",
-                    f"已恢复最近检索结果: {len(papers)} 篇论文",
-                )
-                clear_stats_cache()
-            else:
-                set_page_message("warning", "数据库中未找到论文记录。")
+    if run_dict:
+        st.info(result["message"])
+
+        papers = data.get("papers", [])
+        if papers:
+            st.session_state["search_results"] = papers
+            st.session_state["search_total_count"] = len(papers)
+            st.session_state["search_errors"] = []
+            st.session_state["last_search_query"] = {
+                "keywords": run_dict["query_keywords"],
+                "sources": run_dict["sources_used"].split(",") if run_dict.get("sources_used") else [],
+                "year_from": None,
+                "year_to": None,
+                "max_results": run_dict["total_found"],
+            }
+            set_page_message("success", f"已恢复最近检索结果: {len(papers)} 篇论文")
         else:
-            set_page_message("info", "没有历史检索记录。")
+            set_page_message("warning", "数据库中未找到论文记录。")
+    else:
+        set_page_message("info", result["message"])
 
-        st.rerun()
-    except Exception as e:
-        set_page_message("error", f"恢复检索结果失败: {e}")
-        st.rerun()
-    finally:
-        conn.close()
+    st.rerun()
 
 
 def _execute_search(keywords, sources, year_from, year_to, max_results, sort_by, oa_only, nsc_boost, search_mode):
     """执行文献检索并将结果存入 session_state。"""
-    from src.paper_search.models import SearchQuery
-    from src.paper_search.searcher import PaperSearcher
+    params = {
+        "keywords": keywords,
+        "sources": sources,
+        "year_from": year_from,
+        "year_to": year_to,
+        "max_results": max_results,
+        "sort_by": sort_by,
+        "oa_only": oa_only,
+        "nsc_boost": nsc_boost,
+        "search_mode": search_mode,
+    }
 
-    # 顶刊强化
     final_keywords = keywords
     if nsc_boost:
         final_keywords = f"({keywords}) AND (Nature OR Science OR Cell OR PNAS)"
-
-    query = SearchQuery(
-        keywords=final_keywords,
-        max_results=max_results,
-        year_from=year_from if year_from > 1900 else None,
-        year_to=year_to if year_to < 2030 else None,
-        sources=sources,
-        sort_by=sort_by,
-        filter_oa_only=oa_only,
-    )
 
     with st.status(f"正在检索: '{final_keywords}' ...", expanded=True) as status:
         st.write(f"关键词: {final_keywords}")
@@ -339,48 +309,25 @@ def _execute_search(keywords, sources, year_from, year_to, max_results, sort_by,
         st.write(f"年份: {year_from} - {year_to}")
         st.write(f"排序: {sort_by}")
 
-        try:
-            searcher = PaperSearcher()
-            result = searcher.search(query)
+        result = execute_keyword_search(params)
 
-            # 存入 session_state
-            st.session_state["search_results"] = [
-                {
-                    "title": p.title,
-                    "authors": ", ".join(p.authors),
-                    "doi": p.doi or "",
-                    "year": p.year,
-                    "journal": p.journal or "",
-                    "abstract": (p.abstract or "")[:300],
-                    "oa_status": p.oa_status,
-                    "citation_count": p.citation_count,
-                    "source": p.source_api,
-                }
-                for p in result.papers
-            ]
-            st.session_state["search_total_count"] = result.total_count
-            st.session_state["search_errors"] = result.errors
-            st.session_state["last_search_query"] = {
-                "keywords": final_keywords,
-                "sources": sources,
-                "year_from": year_from,
-                "year_to": year_to,
-                "max_results": max_results,
-            }
+        if result["success"]:
+            data = result["data"]
+            st.session_state["search_results"] = data["papers"]
+            st.session_state["search_total_count"] = data["total_count"]
+            st.session_state["search_errors"] = data["errors"]
+            st.session_state["last_search_query"] = data["last_query"]
+            status.update(label=result["message"], state="complete")
 
-            clear_stats_cache()
-            status.update(label=f"检索完成，找到 {result.total_count} 篇论文", state="complete")
-
-            if result.errors:
-                for err in result.errors:
+            if data["errors"]:
+                for err in data["errors"]:
                     st.warning(err)
-
-        except Exception as e:
+        else:
             status.update(label="检索失败", state="error")
-            st.error(f"检索过程中发生错误: {e}")
+            st.error(f"检索过程中发生错误: {result['error']}")
             st.session_state["search_results"] = None
             st.session_state["search_total_count"] = 0
-            st.session_state["search_errors"] = [str(e)]
+            st.session_state["search_errors"] = [result["error"]]
 
 
 def _display_search_results():
@@ -480,63 +427,31 @@ def _render_journal_watch():
         active_only = st.checkbox("仅活跃期刊", value=True, key=ui_key("search", "watch_active_only"))
 
     if st.button("开始监控 (期刊)", key=ui_key("search", "watch_btn"), type="primary", use_container_width=True):
-        _execute_journal_watch(wl, days, active_only)
+        _execute_journal_watch(days, active_only)
 
 
-def _execute_journal_watch(wl, days, active_only):
+def _execute_journal_watch(days, active_only):
     """执行期刊监控并展示结果。"""
-    from src.paper_search.rss_watcher import run_rss_watch
-    from src.paper_search.aggregator import SearchAggregator
-    from src.paper_search.openalex import OpenAlexSearcher
-
-    journals = wl.get_journals(active_only=active_only)
-    rss_urls = [j["rss_url"] for j in journals if j.get("rss_url")]
-    journal_names = [j["name"] for j in journals if j.get("rss_url")]
 
     with st.status(f"期刊监控中（最近 {days} 天）...", expanded=True) as status:
-        all_papers = []
+        result = execute_journal_watch(days=days, active_only=active_only)
 
-        if rss_urls:
-            st.write(f"正在抓取 {len(rss_urls)} 个 RSS 源...")
-            try:
-                rss_papers = run_rss_watch(rss_urls, journal_names, days=days)
-                st.write(f"RSS 获取: {len(rss_papers)} 篇")
-                all_papers.extend(rss_papers)
-            except Exception as e:
-                st.warning(f"RSS 抓取异常: {e}")
+        if result["success"]:
+            data = result["data"]
+            if data["deduped"] > 0:
+                st.write(f"共发现 {data['deduped']} 篇新论文（新增入库 {data['new_count']} 篇）")
+                status.update(label=result["message"], state="complete")
+                st.success(f"共发现 {data['deduped']} 篇新论文，其中 {data['new_count']} 篇已入库。")
+            else:
+                status.update(label="监控完成，未发现新论文", state="complete")
+                st.info(result["message"])
 
-        search_journals = [j["name"] for j in journals if not j.get("rss_url")]
-        if search_journals:
-            st.write(f"正在通过 API 检索 {len(search_journals)} 个期刊...")
-            searcher = OpenAlexSearcher()
-            for jname in search_journals[:5]:
-                try:
-                    papers = searcher.get_recent(jname, days=days)
-                    all_papers.extend(papers)
-                except Exception as e:
-                    st.warning(f"检索 {jname} 失败: {e}")
-
-        if all_papers:
-            agg = SearchAggregator(searchers=[], repository=get_cached_repository())
-            deduped = agg.deduplicate(all_papers)
-            st.write(f"去重后: {len(deduped)} 篇")
-            save_stats = agg.save_results(deduped)
-            st.write(f"新增入库: {save_stats['new_count']} 篇")
-
-            agg.record_search_run(
-                run_type="daily_watch",
-                sources=["rss", "openalex"],
-                keywords=f"期刊监控 ({days}天)",
-                total_found=len(deduped),
-                new_added=save_stats["new_count"],
-            )
-
-            clear_stats_cache()
-            status.update(label=f"监控完成，共 {len(deduped)} 篇（新增 {save_stats['new_count']} 篇）", state="complete")
-            st.success(f"共发现 {len(deduped)} 篇新论文，其中 {save_stats['new_count']} 篇已入库。")
+            if data.get("errors"):
+                for err in data["errors"]:
+                    st.warning(err)
         else:
-            status.update(label="监控完成，未发现新论文", state="complete")
-            st.info("最近未发现新论文。")
+            status.update(label="监控失败", state="error")
+            st.error(f"监控失败: {result['error']}")
 
 
 # ============================================================================
@@ -568,12 +483,11 @@ if page == "首页 — 系统概览":
     """)
 
     # 快速状态卡片（使用缓存）
-    try:
-        db_stats = get_cached_db_stats()
-        ft_stats = get_cached_download_stats()
-        render_database_stats(db_stats, ft_stats)
-    except Exception:
-        render_database_stats({"total_papers": 0}, {"with_pdf": 0, "by_source": {}})
+    db_stats_result = get_db_stats()
+    ft_stats_result = get_download_stats()
+    db_stats = db_stats_result.get("data", {})
+    ft_stats = ft_stats_result.get("data", {})
+    render_database_stats(db_stats, ft_stats)
 
     st.markdown("""
     #### 快速开始
@@ -660,26 +574,26 @@ elif page == "我的文献库":
         col_lb1, col_lb2 = st.columns([1, 4])
         with col_lb1:
             if st.button("搜索文献库", key=ui_key("library", "search_btn"), type="primary", use_container_width=True):
-                try:
-                    repo = get_cached_repository()
-                    source = None if library_source == "全部" else library_source
-                    yf = lib_year_from if lib_year_from > 1900 else None
-                    yt = lib_year_to if lib_year_to < 2030 else None
-                    papers = repo.search_papers(
-                        keyword=library_keyword or "",
-                        limit=library_limit,
-                        offset=0,
-                        source=source,
-                        year_from=yf,
-                        year_to=yt,
-                    )
+                source = None if library_source == "全部" else library_source
+                yf = lib_year_from if lib_year_from > 1900 else None
+                yt = lib_year_to if lib_year_to < 2030 else None
+                result = search_library(
+                    keyword=library_keyword or "",
+                    limit=library_limit,
+                    offset=0,
+                    source=source,
+                    year_from=yf,
+                    year_to=yt,
+                )
+                if result["success"]:
+                    papers = result["data"]["papers"]
                     st.session_state["library_results"] = papers
-                    st.session_state["library_total_count"] = len(papers)
+                    st.session_state["library_total_count"] = result["data"]["count"]
                     st.session_state["search_errors"] = []
                     if not papers:
                         render_empty_state("未找到", "没有匹配的论文。")
-                except Exception as e:
-                    st.error(f"搜索失败: {e}")
+                else:
+                    st.error(f"搜索失败: {result['error']}")
 
         with col_lb2:
             if st.button("清空筛选条件", key=ui_key("library", "clear_btn"), use_container_width=True):
@@ -730,21 +644,17 @@ elif page == "我的文献库":
         st.markdown("#### 导出文献")
         export_format = st.selectbox("导出格式", EXPORT_FORMATS, key=ui_key("library", "export_format"))
         if st.button("导出全部论文", key=ui_key("library", "export_btn")):
-            try:
-                repo = get_cached_repository()
-                bibtex = repo.export_bibtex()
-                if bibtex:
-                    st.download_button(
-                        "下载 BibTeX",
-                        data=bibtex,
-                        file_name="papers.bib",
-                        mime="text/plain",
-                        key=ui_key("library", "download_bibtex"),
-                    )
-                else:
-                    st.warning("没有可导出的论文。")
-            except Exception as e:
-                st.error(f"导出失败: {e}")
+            result = export_bibtex()
+            if result["success"] and result["data"]:
+                st.download_button(
+                    "下载 BibTeX",
+                    data=result["data"],
+                    file_name="papers.bib",
+                    mime="text/plain",
+                    key=ui_key("library", "download_bibtex"),
+                )
+            else:
+                st.warning(result["message"] or "没有可导出的论文。")
 
 # --- 全文获取 / PDF 下载 ---
 elif page == "全文获取 / PDF 下载":
@@ -753,7 +663,8 @@ elif page == "全文获取 / PDF 下载":
     render_page_message()
 
     # 统计卡片（使用缓存）
-    stats = get_cached_download_stats()
+    stats_result = get_download_stats()
+    stats = stats_result.get("data", {})
     ft_message = st.session_state.get("upload_message", "")
     if ft_message:
         st.info(ft_message)
@@ -821,12 +732,12 @@ elif page == "全文获取 / PDF 下载":
     with col_f2:
         refresh_btn = st.button("刷新列表", key=ui_key("fulltext", "refresh_btn"), use_container_width=True)
         if refresh_btn:
-            clear_stats_cache()
+            clear_cached_stats()
     with col_f3:
         batch_download_btn = st.button("批量获取 (前10篇)", key=ui_key("fulltext", "batch_download_btn"), type="primary", use_container_width=True)
 
-    repo = get_cached_repository()
-    pending_papers = repo.get_papers_without_pdf(limit=pending_limit)
+    pending_result = get_pending_papers(limit=pending_limit)
+    pending_papers = pending_result.get("data", {}).get("papers", [])
 
     if pending_papers:
         pending_data = []
@@ -875,74 +786,63 @@ elif page == "全文获取 / PDF 下载":
         # 查询来源
         if resolve_btn:
             with st.status(f"正在查询论文 {target_paper_id} 的全文来源...", expanded=True) as status:
-                try:
-                    from src.fulltext.service import FullTextAcquisitionService
-                    service = FullTextAcquisitionService(repo)
-                    result = service.resolve(target_paper_id)
-                    st.session_state["fulltext_resolve_result"] = result.to_dict()
-                    if result.pdf_url:
-                        st.success(f"找到可用来源: {result.source} — {result.pdf_url[:100]}...")
+                result = resolve_fulltext(target_paper_id)
+                if result["success"] and result["data"]:
+                    st.session_state["fulltext_resolve_result"] = result["data"]
+                    if result["data"].get("pdf_url"):
+                        st.success(f"找到可用来源: {result['data']['source']} — {result['data']['pdf_url'][:100]}...")
                     else:
-                        st.warning(f"未找到可用全文: {result.error_message or '所有来源均不可用'}")
+                        st.warning(f"未找到可用全文: {result['data'].get('error_message') or '所有来源均不可用'}")
                     status.update(label="查询完成", state="complete")
-                except Exception as e:
-                    st.error(f"查询失败: {e}")
+                else:
+                    st.error(f"查询失败: {result['error']}")
                     status.update(label="查询失败", state="error")
 
         # 下载全文
         if download_btn:
             with st.status(f"正在获取论文 {target_paper_id} 全文...", expanded=True) as status:
-                try:
-                    from src.fulltext.service import FullTextAcquisitionService
-                    service = FullTextAcquisitionService(repo)
-                    user_confirmed = st.session_state.get("institution_access_confirmed", False)
-                    result = service.download(target_paper_id, user_confirmed_institution=user_confirmed)
-                    st.session_state["fulltext_download_result"] = result.to_dict()
-
-                    if result.pdf_path:
-                        st.success(f"PDF 下载成功: {result.pdf_path} ({result.file_size} 字节)")
-                        clear_stats_cache()
+                user_confirmed = st.session_state.get("institution_access_confirmed", False)
+                result = download_fulltext(target_paper_id, user_confirmed_institution=user_confirmed)
+                if result["success"] and result["data"]:
+                    st.session_state["fulltext_download_result"] = result["data"]
+                    data = result["data"]
+                    if data.get("pdf_path"):
+                        st.success(f"PDF 下载成功: {data['pdf_path']} ({data.get('file_size', 0)} 字节)")
                         status.update(label="下载完成", state="complete")
                     else:
-                        st.warning(f"获取失败: {result.error_message}")
+                        st.warning(f"获取失败: {data.get('error_message')}")
                         status.update(label="获取失败", state="error")
-                except Exception as e:
-                    st.error(f"下载失败: {e}")
+                else:
+                    st.error(f"下载失败: {result['error']}")
                     status.update(label="失败", state="error")
 
         # 标记人工审查
         if mark_review_btn:
-            try:
-                success = repo.mark_manual_review(target_paper_id, "用户在 UI 中标记为需人工审查")
-                if success:
-                    st.success(f"论文 {target_paper_id} 已标记为人工审查")
-                    set_page_message("info", f"论文 {target_paper_id} 已标记为人工审查，稍后可通过手动上传获取。")
-                    clear_stats_cache()
-                else:
-                    st.error("更新失败")
-            except Exception as e:
-                st.error(f"操作失败: {e}")
+            result = mark_manual_review(target_paper_id)
+            if result["success"]:
+                st.success(f"论文 {target_paper_id} 已标记为人工审查")
+                set_page_message("info", f"论文 {target_paper_id} 已标记为人工审查，稍后可通过手动上传获取。")
+            else:
+                st.error(result["error"] or "更新失败")
 
         # 批量获取
         if batch_download_btn:
             with st.status("正在批量获取全文...", expanded=True) as status:
-                try:
-                    from src.fulltext.service import FullTextAcquisitionService
-                    service = FullTextAcquisitionService(repo)
-                    pending_ids = [p["paper_id"] for p in pending_papers[:10]]
-                    user_confirmed = st.session_state.get("institution_access_confirmed", False)
-                    results = service.batch_download(pending_ids, user_confirmed_institution=user_confirmed)
-                    success_count = len([r for r in results if r.pdf_path])
-                    st.write(f"批量获取完成: 成功 {success_count}/{len(results)}")
-                    for r in results:
-                        if r.pdf_path:
-                            st.write(f"- {r.paper_id}: {r.source} — 已下载")
+                pending_ids = [p["paper_id"] for p in pending_papers[:10]]
+                user_confirmed = st.session_state.get("institution_access_confirmed", False)
+                result = batch_download_pending(pending_ids, user_confirmed_institution=user_confirmed)
+                if result["success"]:
+                    data = result["data"]
+                    success_count = len([r for r in data if r.get("pdf_path")])
+                    st.write(f"批量获取完成: 成功 {success_count}/{len(data)}")
+                    for r in data:
+                        if r.get("pdf_path"):
+                            st.write(f"- {r['paper_id']}: {r.get('source', '')} — 已下载")
                         else:
-                            st.write(f"- {r.paper_id}: 失败 — {r.error_message}")
-                    clear_stats_cache()
-                    status.update(label=f"批量获取完成: {success_count}/{len(results)} 成功", state="complete")
-                except Exception as e:
-                    st.error(f"批量获取失败: {e}")
+                            st.write(f"- {r['paper_id']}: 失败 — {r.get('error_message', '')}")
+                    status.update(label=f"批量获取完成: {success_count}/{len(data)} 成功", state="complete")
+                else:
+                    st.error(f"批量获取失败: {result['error']}")
                     status.update(label="批量获取失败", state="error")
     else:
         render_empty_state("全文获取完成", "所有论文均已有 PDF，无需获取。", icon="✅")
@@ -967,54 +867,12 @@ elif page == "全文获取 / PDF 下载":
 
     if upload_file and upload_paper_id:
         if st.button("上传并关联", key=ui_key("fulltext", "upload_btn"), type="primary"):
-            try:
-                import tempfile
-                from src.fulltext.manual_upload import ManualUploadResolver
-
-                paper = repo.get_paper_by_id(upload_paper_id)
-                if not paper:
-                    st.error(f"论文 ID {upload_paper_id} 不存在")
-                else:
-                    with tempfile.NamedTemporaryFile(suffix=".pdf", delete=False) as tmp:
-                        tmp.write(upload_file.read())
-                        tmp_path = tmp.name
-
-                    resolver = ManualUploadResolver()
-                    result = resolver.upload(paper, tmp_path, user_confirmed_rights=True)
-
-                    if result.pdf_path:
-                        repo.update_paper_pdf_status(
-                            paper_id=upload_paper_id,
-                            pdf_path=result.pdf_path,
-                            download_status="downloaded",
-                            access_source="manual_upload",
-                            legal_status=result.legal_status,
-                        )
-                        repo.record_fulltext_access(
-                            paper_id=upload_paper_id,
-                            doi=paper.get("doi", ""),
-                            title=paper.get("title", ""),
-                            access_status="manual_upload",
-                            access_source="manual_upload",
-                            access_mode="manual",
-                            legal_status=result.legal_status,
-                            pdf_path=result.pdf_path,
-                            file_size=result.file_size,
-                            checksum_sha256=result.checksum_sha256,
-                            risk_level=result.risk_level,
-                            risk_note=result.risk_note,
-                        )
-                        st.session_state["upload_message"] = (
-                            f"PDF 已上传成功: {Path(result.pdf_path).name} ({result.file_size} 字节)"
-                        )
-                        clear_stats_cache()
-                        st.success(st.session_state["upload_message"])
-                        Path(tmp_path).unlink(missing_ok=True)
-                    else:
-                        st.error(f"上传失败: {result.error_message}")
-                        Path(tmp_path).unlink(missing_ok=True)
-            except Exception as e:
-                st.error(f"上传处理异常: {e}")
+            result = handle_manual_upload(upload_paper_id, upload_file, user_confirmed_rights=True)
+            if result["success"]:
+                st.session_state["upload_message"] = result["message"]
+                st.success(result["message"])
+            else:
+                st.error(result["error"] or result["message"] or "上传失败")
 
     st.divider()
 
