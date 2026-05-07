@@ -383,8 +383,9 @@ def _do_resolve(paper_id: int):
             st.session_state[KEY_FULLTEXT_RESOLVE_RESULT] = result["data"]  # legacy
             data = result["data"]
             if data.get("pdf_url"):
-                st.success(f"可用来源: {data['source']} — {data['pdf_url'][:100]}...")
-                status.update(label=f"找到可用来源: {data['source']}", state="complete")
+                source = data.get("source", "未知")
+                st.success(f"可用来源: {source} — {data['pdf_url'][:100]}...")
+                status.update(label=f"找到可用来源: {source}", state="complete")
             else:
                 st.warning(f"未找到可用全文: {data.get('error_message') or '所有来源均不可用'}")
                 status.update(label="未找到可用来源", state="error")

@@ -68,9 +68,10 @@ def render():
                     source=source, year_from=yf, year_to=yt,
                 )
                 if result["success"]:
-                    papers = result["data"]["papers"]
+                    data = result.get("data", {}) or {}
+                    papers = data.get("papers", [])
                     st.session_state["library_results"] = papers
-                    st.session_state["library_total_count"] = result["data"]["count"]
+                    st.session_state["library_total_count"] = data.get("count", 0)
                     st.session_state["search_errors"] = []
                     if not papers:
                         render_empty_state("未找到", "没有匹配的论文。")

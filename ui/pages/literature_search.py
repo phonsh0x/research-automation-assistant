@@ -256,15 +256,17 @@ def _render_results_table_and_detail(results):
         "引用": st.column_config.NumberColumn(width="small"),
     })
 
-    # Paper selector
+    # Paper selector — guard against stale session_state returning None
+    label_to_idx: dict[str, int] = {label: i for i, label in enumerate(selection_labels)}
+    options = ["—"] + selection_labels
     selected_label = st.selectbox(
         "选择文献查看详情",
-        options=["—"] + selection_labels,
+        options=options,
         key=ui_key("search", "paper_selector"),
     )
 
-    if selected_label != "—":
-        idx = selection_labels.index(selected_label)
+    if selected_label and selected_label != "—":
+        idx = label_to_idx.get(selected_label, 0)
         paper = results[idx]
         _render_paper_detail(paper, idx)
 
@@ -383,10 +385,10 @@ def _restore_last_search():
             st.session_state["search_total_count"] = len(papers)
             st.session_state["search_errors"] = []
             st.session_state["last_search_query"] = {
-                "keywords": run_dict["query_keywords"],
-                "sources": run_dict["sources_used"].split(",") if run_dict.get("sources_used") else [],
+                "keywords": run_dict.get("query_keywords", ""),
+                "sources": run_dict.get("sources_used", "").split(",") if run_dict.get("sources_used") else [],
                 "year_from": None, "year_to": None,
-                "max_results": run_dict["total_found"],
+                "max_results": run_dict.get("total_found", 0),
             }
             st.session_state["search_last_stats"] = {
                 "total_count": len(papers),
