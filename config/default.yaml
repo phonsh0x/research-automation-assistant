@@ -197,6 +197,30 @@ writing:
   # 生成内容最大长度
   max_generation_length: 8192
 
+# --- 数据源配置（元数据检索）---
+openalex:
+  enabled: true
+  api_key: ""
+  email: ""
+
+crossref:
+  enabled: true
+  mailto: ""
+  user_agent: "ResearchAutomationAssistant/0.2"
+
+pubmed:
+  enabled: true
+  api_key: ""
+  email: ""
+  tool: "ResearchAutomationAssistant"
+
+semantic_scholar:
+  enabled: false
+  api_key: ""
+
+arxiv:
+  enabled: true
+
 # --- 全文获取 ---
 fulltext:
   pdf_dir: "data/pdf"

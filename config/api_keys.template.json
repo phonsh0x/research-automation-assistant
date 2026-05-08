@@ -17,7 +17,11 @@
   "unpaywall": {
     "email": ""
   },
-  "crossref": {
+  "openalex": {
+    "api_key": "",
     "email": ""
+  },
+  "crossref": {
+    "mailto": ""
   }
 }

@@ -196,6 +196,16 @@ def _render_pending_papers_section() -> int | None:
     Returns the selected paper_id or None."""
     render_section("待获取全文的论文")
 
+    # Pre-download tips
+    with st.expander("下载前提示", expanded=False):
+        st.caption("• OpenAlex / Crossref / PubMed 负责**元数据检索**，不保证 PDF 全文。")
+        st.caption("• 真正下载 PDF 依赖 **Unpaywall / PMC / arXiv / 出版社 OA / 校园网授权 / 手动上传**。")
+        from src.config import get_config
+        if not get_config("unpaywall.email", ""):
+            st.warning("⚠ Unpaywall email 未配置，建议前往「系统设置 → API 配置」添加。")
+        st.caption("• 若 DOI 为测试 DOI（如 10.9999 开头），无法用于真实下载验证。")
+        st.caption("• 结果为「未找到合法全文」时，说明所有合法来源均不可用，可尝试校园网授权或手动上传。")
+
     c_f1, c_f2, c_f3 = st.columns([2, 1, 1])
     with c_f1:
         limit = st.selectbox(

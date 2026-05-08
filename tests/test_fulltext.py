@@ -628,3 +628,74 @@ class TestBatchSummary:
         assert unavailable + failed == 3
         # unavailable should NOT inflate failed_count
         assert failed == 1
+
+
+# ============================================================================
+# Source health check
+# ============================================================================
+
+class TestSourceHealthChecker:
+    def test_openalex_no_key_not_blocking(self):
+        from src.fulltext.source_health import SourceHealthChecker
+        r = SourceHealthChecker.check_openalex()
+        assert r["source"] == "OpenAlex"
+        assert r["type"] == "metadata"
+        assert r["requires_key"] is False
+        # Available even without key
+        assert r["available"] is True
+
+    def test_unpaywall_no_email_warns(self):
+        from src.fulltext.source_health import SourceHealthChecker
+        r = SourceHealthChecker.check_unpaywall()
+        assert r["source"] == "Unpaywall"
+        assert r["type"] == "fulltext"
+        assert r["requires_email"] is True
+        # Without email, configured should be False (or message contains warning)
+        if not r["configured"]:
+            assert "未配置" in r["message"] or "warning" in r["message"].lower()
+
+    def test_pubmed_no_key_default_rps(self):
+        from src.fulltext.source_health import SourceHealthChecker
+        r = SourceHealthChecker.check_pubmed()
+        assert r["requires_key"] is False
+        assert r["available"] is True
+        # Without key, default 3 rps message
+        if not r["configured"]:
+            assert "3 rps" in r["message"]
+
+    def test_crossref_mailto_configured_detection(self):
+        from src.fulltext.source_health import SourceHealthChecker
+        r = SourceHealthChecker.check_crossref()
+        assert r["source"] == "Crossref"
+        assert r["type"] == "metadata"
+        assert r["requires_email"] is True
+
+    def test_arxiv_always_available(self):
+        from src.fulltext.source_health import SourceHealthChecker
+        r = SourceHealthChecker.check_arxiv()
+        assert r["available"] is True
+        assert r["requires_key"] is False
+        assert r["type"] == "fulltext"
+
+    def test_check_all_returns_both_groups(self):
+        from src.fulltext.source_health import SourceHealthChecker
+        result = SourceHealthChecker.check_all()
+        assert "metadata" in result
+        assert "fulltext" in result
+        assert len(result["metadata"]) == 5
+        assert len(result["fulltext"]) == 6
+
+    def test_api_key_not_leaked_in_message(self):
+        """Health check messages must not contain raw secrets."""
+        from src.fulltext.source_health import SourceHealthChecker
+        for check_fn in [
+            SourceHealthChecker.check_openalex,
+            SourceHealthChecker.check_pubmed,
+            SourceHealthChecker.check_unpaywall,
+        ]:
+            r = check_fn()
+            msg = r.get("message", "")
+            advice = r.get("advice", "")
+            # Message should not contain placeholder values
+            assert "your-" not in msg.lower()
+            assert "your-" not in advice.lower()
