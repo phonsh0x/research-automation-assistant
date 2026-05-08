@@ -268,7 +268,7 @@ def _render_pending_papers_section():
 
         cc1, cc2, cc3 = st.columns([0.06, 0.64, 0.30])
         with cc1:
-            st.checkbox("", key=checkbox_key_for(SCOPE, pid), label_visibility="collapsed")
+            st.checkbox("选择论文", key=checkbox_key_for(SCOPE, pid), label_visibility="collapsed")
         with cc2:
             st.markdown(f"**{title}**")
             st.caption(f"作者：{authors}")

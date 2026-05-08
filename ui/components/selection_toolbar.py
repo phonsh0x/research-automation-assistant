@@ -17,7 +17,7 @@ Usage::
 
     # For each paper card:
     ck = checkbox_key_for("fulltext", paper_id)
-    st.checkbox("", key=ck, label_visibility="collapsed")
+    st.checkbox("选择论文", key=ck, label_visibility="collapsed")
 
     # Read selected IDs:
     selected = selected_ids_for("fulltext", papers)
