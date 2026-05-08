@@ -29,9 +29,16 @@ class PaperRepository:
         papers = repo.search_by_keyword("deep learning", limit=20)
     """
 
-    def __init__(self):
-        """初始化数据仓库，确保数据库已初始化。"""
-        self.db = get_db()
+    def __init__(self, db=None):
+        """初始化数据仓库，确保数据库已初始化。
+
+        Args:
+            db: 可选的 DatabaseManager 实例。未提供时使用全局单例。
+        """
+        if db is not None:
+            self.db = db
+        else:
+            self.db = get_db()
         self.db.initialize()
         logger.info("PaperRepository 已初始化。")
 

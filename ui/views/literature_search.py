@@ -232,7 +232,7 @@ def _render_results_table_and_detail(results):
         idx = i + 1
         title = paper.get("title", "")
         short_title = title[:80] + "..." if len(title) > 80 else title
-        selection_labels.append(f"#{idx} — {short_title}")
+        selection_labels.append(f"第 {idx} 篇 — {short_title}")
 
         table_data.append({
             "序号": idx,
@@ -273,7 +273,7 @@ def _render_results_table_and_detail(results):
 
 def _render_paper_detail(paper: dict, idx: int):
     """Show a single paper's full metadata."""
-    with st.expander(f"文献详情: #{idx + 1} — {(paper.get('title') or '')[:60]}...", expanded=True):
+    with st.expander(f"文献详情: {(paper.get('title') or '')[:60]}...", expanded=True):
         c1, c2 = st.columns(2)
         with c1:
             st.markdown(f"**标题**: {paper.get('title', '—')}")
@@ -298,7 +298,8 @@ def _render_paper_detail(paper: dict, idx: int):
             if st.button("加入全文获取队列", key=ui_key("search", "queue_ft", idx),
                          use_container_width=True):
                 st.session_state["fulltext_target_paper_id"] = idx + 1
-                set_page_message("info", f"论文 #{idx + 1} 已加入全文获取队列，请切换到「全文获取 / PDF 下载」页面操作。")
+                title = paper.get("title", "")[:40]
+                set_page_message("info", f"《{title}》已加入全文获取队列，请切换到「全文获取 / PDF 下载」页面操作。")
                 st.rerun()
         with ca2:
             doi = paper.get("doi")
@@ -321,6 +322,9 @@ def _render_action_bar():
         if st.button("清空检索结果", key=ui_key("search", "clear_btn"), use_container_width=True):
             clear_search_state()
             set_page_message("info", "检索结果已清空。")
+            st.rerun()
+    with c3:
+        if st.button("刷新数据", key=ui_key("search", "refresh"), use_container_width=True):
             st.rerun()
 
 

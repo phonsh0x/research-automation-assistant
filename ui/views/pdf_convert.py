@@ -1,6 +1,6 @@
 """PDF-to-Markdown conversion page — Phase 2.3.
 
-Checkbox-based paper selection with single/batch convert and preview.
+Unified selection toolbar + checkbox paper cards.
 """
 
 import streamlit as st
@@ -9,6 +9,10 @@ from ui.state import ui_key
 from ui.components.layout import render_page_header, render_section, render_empty_state
 from ui.components.metric_cards import render_metric_cards
 from ui.components.messages import render_page_message
+from ui.components.selection_toolbar import (
+    render_selection_toolbar,
+    checkbox_key_for,
+)
 from ui.services.pdf_convert_ui_service import (
     get_conversion_stats,
     get_pending_papers,
@@ -17,28 +21,10 @@ from ui.services.pdf_convert_ui_service import (
     get_markdown_preview,
 )
 
-_SELECTED_KEY = "pdf_convert_selected_ids"
-
-
-def _checkbox_key(paper_id: int) -> str:
-    return ui_key("pdf_convert_select", paper_id)
-
-
-def _selected_ids_from_checkboxes(papers: list[dict]) -> list[int]:
-    """Reconstruct selected-id list from individual checkbox widget states."""
-    ids = []
-    for p in papers:
-        pid = p["paper_id"]
-        if st.session_state.get(_checkbox_key(pid), False):
-            ids.append(pid)
-    return ids
+SCOPE = "pdf_convert"
 
 
 def render():
-    # Ensure selected_ids list exists
-    if _SELECTED_KEY not in st.session_state:
-        st.session_state[_SELECTED_KEY] = []
-
     render_page_header("PDF 转 Markdown", "将学术 PDF 论文转换为结构化 Markdown。")
     render_page_message()
 
@@ -52,6 +38,11 @@ def render():
         {"label": "全文记录", "value": stats.get("full_text_records", 0)},
     ]
     render_metric_cards(metrics, columns=4)
+
+    c_refresh, _ = st.columns([1, 5])
+    with c_refresh:
+        if st.button("刷新数据", key=ui_key("pdf_convert", "refresh"), use_container_width=True):
+            st.rerun()
 
     st.divider()
 
@@ -70,55 +61,33 @@ def render():
 
     all_ids = [p["paper_id"] for p in pending_papers]
 
-    # ----- Top action bar (rendered BEFORE checkboxes) -----
-    c_bar1, c_bar2, c_bar3, c_bar4 = st.columns([1, 1, 2, 2])
-    with c_bar1:
-        if st.button("全选", key=ui_key("pdf_convert", "select_all"), use_container_width=True):
-            for pid in all_ids:
-                st.session_state[_checkbox_key(pid)] = True
-            st.session_state[_SELECTED_KEY] = list(all_ids)
-            st.rerun()
-    with c_bar2:
-        if st.button("取消全选", key=ui_key("pdf_convert", "deselect_all"), use_container_width=True):
-            for pid in all_ids:
-                st.session_state[_checkbox_key(pid)] = False
-            st.session_state[_SELECTED_KEY] = []
-            st.rerun()
+    # Unified selection toolbar
+    batch_clicked, selected_ids = render_selection_toolbar(
+        scope=SCOPE,
+        item_ids=all_ids,
+        batch_label="批量转换所选论文",
+    )
 
-    # Compute current selected IDs from checkbox states
-    selected_ids = _selected_ids_from_checkboxes(pending_papers)
-    st.session_state[_SELECTED_KEY] = selected_ids
-    selected_count = len(selected_ids)
-
-    with c_bar3:
-        st.markdown(f"**已选择 {selected_count} 篇论文**")
-    with c_bar4:
-        if st.button("批量转换所选论文", key=ui_key("pdf_convert", "batch_selected"),
-                     type="primary", use_container_width=True, disabled=selected_count == 0):
-            if selected_count == 0:
-                st.warning("请先选择至少一篇论文。")
+    if batch_clicked and selected_ids:
+        with st.status(f"正在批量转换 {len(selected_ids)} 篇论文...", expanded=True) as status:
+            result = convert_selected(selected_ids)
+            if result["success"]:
+                d = result["data"]
+                c1, c2, c3 = st.columns(3)
+                with c1: st.metric("成功", d.get("success_count", 0))
+                with c2: st.metric("失败", d.get("failed_count", 0))
+                with c3: st.metric("跳过", d.get("skipped_count", 0))
+                status.update(label=result["message"], state="complete")
+                for pid in all_ids:
+                    st.session_state[checkbox_key_for(SCOPE, pid)] = False
+                st.rerun()
             else:
-                with st.status(f"正在批量转换 {len(selected_ids)} 篇论文...", expanded=True) as status:
-                    result = convert_selected(selected_ids)
-                    if result["success"]:
-                        d = result["data"]
-                        c1, c2, c3 = st.columns(3)
-                        with c1: st.metric("成功", d.get("success_count", 0))
-                        with c2: st.metric("失败", d.get("failed_count", 0))
-                        with c3: st.metric("跳过", d.get("skipped_count", 0))
-                        status.update(label=result["message"], state="complete")
-                        # Clear selection and individual checkbox states
-                        for pid in all_ids:
-                            st.session_state[_checkbox_key(pid)] = False
-                        st.session_state[_SELECTED_KEY] = []
-                        st.rerun()
-                    else:
-                        st.error(result["error"] or "批量转换失败")
-                        status.update(label="批量转换失败", state="error")
+                st.error(result["error"] or "批量转换失败")
+                status.update(label="批量转换失败", state="error")
 
     st.divider()
 
-    # ----- Paper card list -----
+    # Paper card list
     for p in pending_papers:
         pid = p["paper_id"]
         title = p.get("title") or "未命名论文"
@@ -134,10 +103,7 @@ def render():
 
         cc1, cc2, cc3 = st.columns([0.06, 0.74, 0.20])
         with cc1:
-            st.checkbox(
-                "", key=_checkbox_key(pid),
-                label_visibility="collapsed",
-            )
+            st.checkbox("", key=checkbox_key_for(SCOPE, pid), label_visibility="collapsed")
         with cc2:
             st.markdown(f"**{title}**")
             st.caption(f"作者：{authors}")

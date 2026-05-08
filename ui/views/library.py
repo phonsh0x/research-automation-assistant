@@ -30,6 +30,11 @@ def render():
     render_page_header("我的文献库", "管理已入库的论文。")
     render_page_message()
 
+    c_refresh, _ = st.columns([1, 5])
+    with c_refresh:
+        if st.button("刷新数据", key=ui_key("library", "refresh"), use_container_width=True):
+            st.rerun()
+
     tab1, tab2 = st.tabs(["论文列表", "导入/导出"])
 
     with tab1:
