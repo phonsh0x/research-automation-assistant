@@ -15,12 +15,32 @@ _CSS = """
 }
 
 /* --- Hide default Streamlit chrome --- */
-#MainMenu, header[data-testid="stHeader"], [data-testid="stToolbar"],
-[data-testid="stDecoration"], footer, .stDeployButton {
-    display: none !important;
+#MainMenu {
+    visibility: hidden;
 }
+
+footer {
+    visibility: hidden;
+}
+
+[data-testid="stToolbar"] {
+    display: none;
+}
+
+[data-testid="stDecoration"] {
+    display: none;
+}
+
+[data-testid="stStatusWidget"] {
+    display: none;
+}
+
 [data-testid="stSidebarNav"] {
     display: none !important;
+}
+
+.stDeployButton {
+    display: none;
 }
 
 /* --- Stats cards (home page) --- */
