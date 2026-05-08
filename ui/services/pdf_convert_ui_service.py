@@ -7,6 +7,41 @@ from ui.services.repository_service import get_repository, clear_cached_stats
 
 _log = get_logger("ui.pdf_convert_ui_service")
 
+# Project root for resolving relative pdf/md paths
+_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
+
+
+def _resolve_path(raw: str | None) -> Path | None:
+    """Resolve a possibly-relative path against the project root."""
+    if not raw:
+        return None
+    p = Path(raw)
+    if p.is_absolute():
+        return p if p.exists() else None
+    resolved = _PROJECT_ROOT / p
+    return resolved if resolved.exists() else None
+
+
+def _pdf_status(raw_path: str | None) -> tuple[bool, str]:
+    """Return (available, label) for a pdf_path."""
+    if not raw_path:
+        return False, "路径缺失"
+    resolved = _resolve_path(raw_path)
+    if resolved is None:
+        return False, "文件不存在"
+    if resolved.suffix.lower() != ".pdf":
+        return False, "格式异常"
+    return True, "已存在"
+
+
+def _md_status(raw_path: str | None) -> tuple[bool, str]:
+    """Return (available, label) for an md_path."""
+    if not raw_path:
+        return False, "未转换"
+    if _resolve_path(raw_path) is None:
+        return False, "未转换"
+    return True, "已转换"
+
 
 def get_conversion_stats() -> dict:
     """Return conversion statistics."""
@@ -25,6 +60,11 @@ def get_pending_papers(limit: int = 20) -> dict:
         raw = repo.get_papers_with_pdf_without_markdown(limit=limit)
         papers = []
         for p in raw:
+            pdf_path = p.get("pdf_path")
+            pdf_avail, pdf_label = _pdf_status(pdf_path)
+            md_path = p.get("md_path")
+            md_avail, md_label = _md_status(md_path)
+
             papers.append({
                 "paper_id": p.get("paper_id"),
                 "title": p.get("title") or "未命名论文",
@@ -32,12 +72,14 @@ def get_pending_papers(limit: int = 20) -> dict:
                 "year": p.get("year"),
                 "journal": p.get("journal"),
                 "doi": p.get("doi"),
-                "pdf_path": p.get("pdf_path"),
-                "md_path": p.get("md_path"),
-                "conversion_status": "done" if (p.get("md_path")) else "pending",
+                "pdf_path": pdf_path,
+                "pdf_available": pdf_avail,
+                "pdf_status_label": pdf_label,
+                "md_path": md_path,
+                "md_available": md_avail,
+                "md_status_label": md_label,
             })
 
-        # Stable sort: year desc, title asc, paper_id asc
         papers.sort(key=lambda x: (
             -(x.get("year") or 0),
             x.get("title", ""),
@@ -58,14 +100,16 @@ def convert_single(paper_id: int) -> dict:
         repo = get_repository()
         paper = repo.get_paper_by_id(paper_id)
         if not paper:
-            return {"success": False, "data": None, "message": f"论文 #{paper_id} 不存在", "error": None}
+            return {"success": False, "data": None, "message": "该论文不存在", "error": None}
 
         pdf_path = paper.get("pdf_path", "")
-        if not pdf_path or not Path(pdf_path).exists():
-            return {"success": False, "data": None, "message": "", "error": f"论文 #{paper_id} 没有可用的 PDF 文件"}
+        resolved = _resolve_path(pdf_path)
+        if resolved is None:
+            return {"success": False, "data": None, "message": "",
+                    "error": "当前论文没有可用的 PDF 文件，请先在全文获取页面下载或手动上传 PDF。"}
 
         converter = PDFConverter()
-        result = converter.convert(Path(pdf_path))
+        result = converter.convert(resolved)
         result.paper_id = paper_id
 
         if result.status == "success":
@@ -73,7 +117,8 @@ def convert_single(paper_id: int) -> dict:
             repo.record_full_text(result)
             clear_cached_stats()
 
-        return {"success": result.status == "success", "data": result.to_dict(), "message": "", "error": result.error_message}
+        return {"success": result.status == "success", "data": result.to_dict(), "message": "",
+                "error": result.error_message}
     except Exception as exc:
         _log.error("convert_single(%d) failed: %s", paper_id, exc)
         return {"success": False, "data": None, "message": "", "error": str(exc)}
@@ -85,7 +130,8 @@ def convert_batch(limit: int = 10) -> dict:
         repo = get_repository()
         papers = repo.get_papers_with_pdf_without_markdown(limit=limit)
         if not papers:
-            return {"success": True, "data": {"results": [], "total": 0, "success_count": 0}, "message": "没有待转换的论文", "error": None}
+            return {"success": True, "data": {"results": [], "total": 0, "success_count": 0},
+                    "message": "没有待转换的论文", "error": None}
 
         from src.pdf_converter import PDFConverter
         converter = PDFConverter()
@@ -95,11 +141,12 @@ def convert_batch(limit: int = 10) -> dict:
         for p in papers:
             pid = p.get("paper_id")
             pdf_path = p.get("pdf_path", "")
-            if not pdf_path:
-                results_data.append({"paper_id": pid, "status": "skipped", "error_message": "无 PDF 路径"})
+            resolved = _resolve_path(pdf_path)
+            if resolved is None:
+                results_data.append({"paper_id": pid, "status": "skipped", "error_message": "缺少可用 PDF 文件"})
                 continue
 
-            result = converter.convert(Path(pdf_path))
+            result = converter.convert(resolved)
             result.paper_id = pid
             d = result.to_dict()
 
@@ -128,13 +175,14 @@ def get_markdown_preview(paper_id: int) -> dict:
         repo = get_repository()
         paper = repo.get_paper_by_id(paper_id)
         if not paper:
-            return {"success": False, "data": None, "message": f"论文 #{paper_id} 不存在", "error": None}
+            return {"success": False, "data": None, "message": "该论文不存在", "error": None}
 
         md_path = paper.get("md_path", "")
-        if not md_path or not Path(md_path).exists():
+        resolved = _resolve_path(md_path)
+        if resolved is None:
             return {"success": False, "data": None, "message": "", "error": "Markdown 文件不存在，请先转换"}
 
-        content = Path(md_path).read_text(encoding="utf-8")
+        content = resolved.read_text(encoding="utf-8")
         return {"success": True, "data": content[:50000], "message": "", "error": None}
     except Exception as exc:
         _log.error("get_markdown_preview(%d) failed: %s", paper_id, exc)
@@ -144,7 +192,9 @@ def get_markdown_preview(paper_id: int) -> dict:
 def convert_selected(paper_ids: list[int]) -> dict:
     """Convert a specific list of paper IDs in batch."""
     if not paper_ids:
-        return {"success": True, "data": {"results": [], "total": 0, "success_count": 0, "failed_count": 0, "skipped_count": 0}, "message": "没有选中任何论文", "error": None}
+        return {"success": True,
+                "data": {"results": [], "total": 0, "success_count": 0, "failed_count": 0, "skipped_count": 0},
+                "message": "没有选中任何论文", "error": None}
 
     try:
         repo = get_repository()
@@ -163,12 +213,13 @@ def convert_selected(paper_ids: list[int]) -> dict:
                 continue
 
             pdf_path = paper.get("pdf_path", "")
-            if not pdf_path or not Path(pdf_path).exists():
-                results_data.append({"paper_id": pid, "status": "skipped", "error_message": "无 PDF 文件"})
+            resolved = _resolve_path(pdf_path)
+            if resolved is None:
+                results_data.append({"paper_id": pid, "status": "skipped", "error_message": "缺少可用 PDF 文件"})
                 skipped += 1
                 continue
 
-            result = converter.convert(Path(pdf_path))
+            result = converter.convert(resolved)
             result.paper_id = pid
             d = result.to_dict()
 
@@ -198,4 +249,6 @@ def convert_selected(paper_ids: list[int]) -> dict:
         }
     except Exception as exc:
         _log.error("convert_selected failed: %s", exc)
-        return {"success": False, "data": {"results": [], "total": 0, "success_count": 0, "failed_count": 0, "skipped_count": 0}, "message": "", "error": str(exc)}
+        return {"success": False,
+                "data": {"results": [], "total": 0, "success_count": 0, "failed_count": 0, "skipped_count": 0},
+                "message": "", "error": str(exc)}
