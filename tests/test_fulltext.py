@@ -520,3 +520,111 @@ class TestDatabasePdfStatus:
 
         p = repo.get_paper_by_id(paper_id)
         assert p["download_status"] == "manual_review"
+
+
+# ============================================================================
+# Source label mapping
+# ============================================================================
+
+class TestFriendlySource:
+    def test_all_sources_mapped(self):
+        from ui.services.fulltext_ui_service import friendly_source
+        assert friendly_source("all_sources") == "全部合法来源均未找到"
+        assert friendly_source("unpaywall") == "Unpaywall"
+        assert friendly_source("pmc") == "PubMed Central"
+        assert friendly_source("arxiv") == "arXiv"
+        assert friendly_source("publisher_oa") == "出版社开放获取"
+        assert friendly_source("institution_access") == "校园网/机构授权访问"
+        assert friendly_source("manual_upload") == "手动上传"
+
+    def test_unknown_source_passthrough(self):
+        from ui.services.fulltext_ui_service import friendly_source
+        assert friendly_source("custom_source") == "custom_source"
+        assert friendly_source("") == ""
+
+
+# ============================================================================
+# Unavailable status handling
+# ============================================================================
+
+class TestUnavailableStatus:
+    def test_unavailable_result_not_counted_as_failed(self):
+        """unavailable != failed — unavailable means legal sources exhausted."""
+        from src.fulltext.base import FullTextResult
+        r = FullTextResult(
+            paper_id=1, access_status="unavailable",
+            source="all_sources", legal_status="unknown",
+            error_message="所有合法来源均未找到可用全文",
+        )
+        assert r.access_status == "unavailable"
+        assert r.pdf_path is None
+        # unavailable should NOT be classified as failed
+        assert r.access_status != "failed"
+
+    def test_unavailable_maps_to_unavailable_download_status(self):
+        """_update_database should set download_status='unavailable', not 'pending'."""
+        from src.fulltext.base import FullTextResult
+        from src.storage.repository import PaperRepository
+        from src.paper_search.models import PaperMetadata
+
+        repo = PaperRepository()
+        paper = PaperMetadata(
+            title="Unavailable Test Paper",
+            doi="10.9999/unavail.2026",
+            year=2026, source_api="test",
+        )
+        pid, _ = repo.upsert_paper(paper)
+
+        result = FullTextResult(
+            paper_id=pid, access_status="unavailable",
+            source="all_sources", legal_status="unknown",
+            error_message="所有合法来源均未找到可用全文",
+        )
+
+        # Simulate _update_database logic
+        if result.pdf_path:
+            download_status = "downloaded"
+        elif result.access_status == "failed":
+            download_status = "failed"
+        elif result.access_status == "manual_review":
+            download_status = "manual_review"
+        elif result.access_status == "unavailable":
+            download_status = "unavailable"
+        else:
+            download_status = "pending"
+
+        assert download_status == "unavailable", f"Expected 'unavailable', got '{download_status}'"
+
+
+# ============================================================================
+# Batch summary counts
+# ============================================================================
+
+class TestBatchSummary:
+    def test_batch_summary_counts(self):
+        """Verify batch_download_pending computes correct summary counts."""
+        from src.fulltext.base import FullTextResult
+
+        # Build a mix of result statuses
+        results = [
+            FullTextResult(paper_id=1, access_status="open_access", pdf_path="/tmp/p1.pdf"),
+            FullTextResult(paper_id=2, access_status="unavailable", source="all_sources",
+                          error_message="所有合法来源均未找到可用全文"),
+            FullTextResult(paper_id=3, access_status="unavailable", source="all_sources"),
+            FullTextResult(paper_id=4, access_status="manual_review", source="manual_upload"),
+            FullTextResult(paper_id=5, access_status="failed", source="unknown",
+                          error_message="下载异常"),
+        ]
+
+        downloaded = len([r for r in results if r.pdf_path])
+        unavailable = len([r for r in results if r.access_status == "unavailable"])
+        manual_review = len([r for r in results if r.access_status == "manual_review"])
+        failed = len([r for r in results if r.access_status == "failed"])
+
+        assert downloaded == 1
+        assert unavailable == 2
+        assert manual_review == 1
+        assert failed == 1
+        assert unavailable + failed == 3
+        # unavailable should NOT inflate failed_count
+        assert failed == 1

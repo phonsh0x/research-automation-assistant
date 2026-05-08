@@ -12,6 +12,26 @@ from ui.services.repository_service import get_repository, clear_cached_stats
 
 _log = get_logger("ui.fulltext_ui_service")
 
+# ============================================================================
+# Source-name display mapping
+# ============================================================================
+
+_SOURCE_LABELS: dict[str, str] = {
+    "all_sources": "全部合法来源均未找到",
+    "unpaywall": "Unpaywall",
+    "pmc": "PubMed Central",
+    "arxiv": "arXiv",
+    "publisher_oa": "出版社开放获取",
+    "institution_access": "校园网/机构授权访问",
+    "manual_upload": "手动上传",
+    "unknown": "未知来源",
+}
+
+
+def friendly_source(source: str) -> str:
+    """Convert internal source name to a user-friendly label."""
+    return _SOURCE_LABELS.get(source, source)
+
 
 # ============================================================================
 # FullTextAcquisitionService helpers
@@ -61,21 +81,54 @@ def download_fulltext(paper_id: int, user_confirmed_institution: bool = False) -
 
 
 def batch_download_pending(paper_ids: list[int], user_confirmed_institution: bool = False) -> dict:
-    """Download multiple papers' PDFs."""
+    """Download multiple papers' PDFs.  Returns per-paper results AND summary counts."""
     try:
         service = _get_ft_service()
         results = service.batch_download(paper_ids, user_confirmed_institution=user_confirmed_institution)
         data = [r.to_dict() for r in results]
+
+        # Compute summary counts from result statuses
+        downloaded = 0
+        unavailable = 0
+        manual_review = 0
+        failed = 0
+        skipped = 0
+
+        for r in results:
+            if r.pdf_path:
+                downloaded += 1
+            elif r.access_status == "unavailable":
+                unavailable += 1
+            elif r.access_status == "manual_review":
+                manual_review += 1
+            elif r.access_status in ("failed", "unsupported_source"):
+                failed += 1
+            else:
+                skipped += 1
+
+        # Map source names to friendly labels
+        for item in data:
+            raw = item.get("source", "")
+            item["source_label"] = friendly_source(raw)
+
         clear_cached_stats()
         return {
             "success": True,
             "data": data,
+            "summary": {
+                "total": len(results),
+                "downloaded": downloaded,
+                "unavailable": unavailable,
+                "manual_review": manual_review,
+                "failed": failed,
+                "skipped": skipped,
+            },
             "message": "",
             "error": None,
         }
     except Exception as exc:
         _log.error("batch_download_pending failed: %s", exc)
-        return {"success": False, "data": [], "message": "", "error": str(exc)}
+        return {"success": False, "data": [], "summary": {}, "message": "", "error": str(exc)}
 
 
 # ============================================================================

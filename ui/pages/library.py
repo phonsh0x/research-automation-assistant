@@ -15,6 +15,17 @@ from ui.services.repository_service import search_library
 from ui.services.export_service import export_bibtex
 
 
+def _normalize_year(value):
+    """Safely normalise a year value for comparison and filtering."""
+    if value is None:
+        return None
+    try:
+        value = int(value)
+    except (TypeError, ValueError):
+        return None
+    return value if 1900 < value < 2030 else None
+
+
 def render():
     render_page_header("我的文献库", "管理已入库的论文。")
     render_page_message()
@@ -61,22 +72,25 @@ def render():
         with col_lb1:
             if st.button("搜索文献库", key=ui_key("library", "search_btn"), type="primary", use_container_width=True):
                 source = None if library_source == "全部" else library_source
-                yf = lib_year_from if lib_year_from > 1900 else None
-                yt = lib_year_to if lib_year_to < 2030 else None
-                result = search_library(
-                    keyword=library_keyword or "", limit=library_limit, offset=0,
-                    source=source, year_from=yf, year_to=yt,
-                )
-                if result["success"]:
-                    data = result.get("data", {}) or {}
-                    papers = data.get("papers", [])
-                    st.session_state["library_results"] = papers
-                    st.session_state["library_total_count"] = data.get("count", 0)
-                    st.session_state["search_errors"] = []
-                    if not papers:
-                        render_empty_state("未找到", "没有匹配的论文。")
+                yf = _normalize_year(lib_year_from)
+                yt = _normalize_year(lib_year_to)
+                if yf is not None and yt is not None and yf > yt:
+                    st.warning("起始年份不能大于结束年份。")
                 else:
-                    st.error(f"搜索失败: {result['error']}")
+                    result = search_library(
+                        keyword=library_keyword or "", limit=library_limit, offset=0,
+                        source=source, year_from=yf, year_to=yt,
+                    )
+                    if result["success"]:
+                        data = result.get("data", {}) or {}
+                        papers = data.get("papers", [])
+                        st.session_state["library_results"] = papers
+                        st.session_state["library_total_count"] = data.get("count", 0)
+                        st.session_state["search_errors"] = []
+                        if not papers:
+                            render_empty_state("未找到", "没有匹配的论文。")
+                    else:
+                        st.error(f"搜索失败: {result['error']}")
 
         with col_lb2:
             if st.button("清空筛选条件", key=ui_key("library", "clear_btn"), use_container_width=True):

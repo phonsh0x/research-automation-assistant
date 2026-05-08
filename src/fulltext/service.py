@@ -213,9 +213,16 @@ class FullTextAcquisitionService:
             if i < len(paper_ids):
                 time.sleep(get_config("institution_access.request_interval_seconds", 8))
 
-        succeeded = len([r for r in results if r.pdf_path])
+        downloaded = len([r for r in results if r.pdf_path])
+        unavailable = len([r for r in results if r.access_status == "unavailable"])
+        manual_review = len([r for r in results if r.access_status == "manual_review"])
         failed = len([r for r in results if r.access_status == "failed"])
-        logger.info(f"批量下载完成: 成功={succeeded}, 失败={failed}, 总计={len(results)}")
+        skipped = len([r for r in results if r.access_status == "skipped"])
+        logger.info(
+            f"批量下载完成: total={len(results)} downloaded={downloaded} "
+            f"unavailable={unavailable} manual_review={manual_review} "
+            f"failed={failed} skipped={skipped}"
+        )
         return results
 
     # ==========================================================================
@@ -278,6 +285,8 @@ class FullTextAcquisitionService:
                 download_status = "manual_review"
             elif result.access_status == "unsupported_source":
                 download_status = "failed"
+            elif result.access_status == "unavailable":
+                download_status = "unavailable"
             else:
                 download_status = "pending"
 

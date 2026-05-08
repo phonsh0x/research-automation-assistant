@@ -293,13 +293,50 @@ def _execute_batch_download(papers: list[dict]):
     with st.status("正在批量获取全文...", expanded=True) as status:
         result = batch_download_pending(pending_ids, user_confirmed_institution=user_confirmed)
         if result["success"]:
+            summary = result.get("summary", {})
             data = result["data"]
-            ok = len([r for r in data if r.get("pdf_path")])
-            st.write(f"批量获取完成: 成功 {ok}/{len(data)}")
+
+            # Summary cards
+            c1, c2, c3, c4, c5, c6 = st.columns(6)
+            with c1:
+                st.metric("总计", summary.get("total", len(data)))
+            with c2:
+                st.metric("已下载", summary.get("downloaded", 0))
+            with c3:
+                st.metric("未找到全文", summary.get("unavailable", 0))
+            with c4:
+                st.metric("需人工处理", summary.get("manual_review", 0))
+            with c5:
+                st.metric("程序失败", summary.get("failed", 0))
+            with c6:
+                st.metric("跳过", summary.get("skipped", 0))
+
+            # Per-paper results with friendly status
             for r in data:
-                icon = "✅" if r.get("pdf_path") else "❌"
-                st.write(f"{icon} #{r['paper_id']}: {r.get('source', '—')}")
-            status.update(label=f"批量获取: {ok}/{len(data)} 成功", state="complete")
+                pid = r.get("paper_id", "?")
+                access = r.get("access_status", "")
+                source_label = r.get("source_label", r.get("source", "—"))
+                error = r.get("error_message", "")
+                pdf = r.get("pdf_path")
+
+                if pdf:
+                    st.write(f"✅ #{pid} 下载成功 | 来源：{source_label}")
+                elif access == "unavailable":
+                    hint = "建议：校园网授权访问 / 手动上传 / 标记人工审查"
+                    st.write(f"⚪ #{pid} 未找到合法全文 | 已记录 | {hint}")
+                elif access == "manual_review":
+                    st.write(f"🟡 #{pid} 需要人工处理 | 原因：{error or '—'}")
+                elif access in ("failed", "unsupported_source"):
+                    st.write(f"❌ #{pid} 获取失败 | 原因：{error or source_label}")
+                else:
+                    st.write(f"⏭️ #{pid} 已跳过 | 原因：{error or access or '已有 PDF'}")
+
+            status.update(
+                label=f"批量获取: total={summary.get('total', 0)} "
+                f"downloaded={summary.get('downloaded', 0)} "
+                f"unavailable={summary.get('unavailable', 0)}",
+                state="complete",
+            )
         else:
             st.error(f"批量获取失败: {result['error']}")
             status.update(label="批量获取失败", state="error")

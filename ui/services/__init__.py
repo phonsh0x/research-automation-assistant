@@ -24,6 +24,7 @@ from ui.services.fulltext_ui_service import (
     batch_download_pending,
     mark_manual_review,
     handle_manual_upload,
+    friendly_source,
 )
 from ui.services.export_service import (
     export_bibtex,
@@ -50,6 +51,7 @@ __all__ = [
     "batch_download_pending",
     "mark_manual_review",
     "handle_manual_upload",
+    "friendly_source",
     # export
     "export_bibtex",
     "export_csv",
