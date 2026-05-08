@@ -373,6 +373,46 @@ async def rag_query(request: dict):
 # PDF 转换
 # ============================================================================
 
+@app.get("/api/v1/convert/stats")
+async def convert_stats():
+    """PDF conversion statistics."""
+    from ui.services.pdf_convert_ui_service import get_conversion_stats
+    result = get_conversion_stats()
+    return {"stats": result.get("data", {})}
+
+
+@app.get("/api/v1/convert/pending")
+async def convert_pending(limit: int = 20):
+    """Papers with PDF but no Markdown."""
+    from ui.services.pdf_convert_ui_service import get_pending_papers
+    result = get_pending_papers(limit=limit)
+    return {"pending": result.get("data", {}).get("papers", []), "count": result.get("data", {}).get("count", 0)}
+
+
+@app.post("/api/v1/convert/{paper_id}")
+async def convert_paper(paper_id: int):
+    """Convert a single paper's PDF to Markdown."""
+    from ui.services.pdf_convert_ui_service import convert_single
+    result = convert_single(paper_id)
+    return {"success": result["success"], "data": result.get("data"), "error": result.get("error")}
+
+
+@app.post("/api/v1/convert/batch")
+async def convert_batch_papers(limit: int = 10):
+    """Batch convert pending papers."""
+    from ui.services.pdf_convert_ui_service import convert_batch
+    result = convert_batch(limit=limit)
+    return {"success": result["success"], "data": result.get("data"), "message": result.get("message")}
+
+
+@app.get("/api/v1/convert/preview/{paper_id}")
+async def convert_preview(paper_id: int):
+    """Preview converted Markdown for a paper."""
+    from ui.services.pdf_convert_ui_service import get_markdown_preview
+    result = get_markdown_preview(paper_id)
+    return {"success": result["success"], "data": result.get("data"), "error": result.get("error")}
+
+
 @app.post("/api/v1/convert")
 async def convert_pdf(request: dict):
     """
@@ -380,22 +420,16 @@ async def convert_pdf(request: dict):
 
     请求体示例：
     {
-        "pdf_path": "data/pdf/paper.pdf",
-        "tool": "marker"
+        "paper_id": 1
     }
     """
-    pdf_path = request.get("pdf_path", "")
-    if not pdf_path:
-        return {"error": "pdf_path 参数为必填项"}
+    paper_id = request.get("paper_id")
+    if not paper_id:
+        return {"success": False, "error": "paper_id 参数为必填项"}
 
-    logger.info(f"API PDF 转换请求: {pdf_path}")
-
-    # Phase 2 占位
-    return {
-        "pdf_path": pdf_path,
-        "success": False,
-        "message": "PDF 转换接口框架已就绪，转换逻辑将在 Phase 2 中实现。",
-    }
+    from ui.services.pdf_convert_ui_service import convert_single
+    result = convert_single(int(paper_id))
+    return {"success": result["success"], "data": result.get("data"), "error": result.get("error")}
 
 
 # ============================================================================

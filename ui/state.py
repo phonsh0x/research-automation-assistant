@@ -142,6 +142,9 @@ _DEFAULTS: dict[str, object] = {
     KEY_FT_INSTITUTION_CONFIRMED: False,
     KEY_FT_UPLOAD_RIGHTS_CONFIRMED: False,
 
+    # --- PDF 转换 ---
+    "pdf_convert_selected_ids": [],
+
     # --- 跨页面消息 ---
     KEY_PAGE_MESSAGE: None,
 }

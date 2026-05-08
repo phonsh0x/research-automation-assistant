@@ -941,3 +941,95 @@ class PaperRepository:
             return ""
         finally:
             conn.close()
+
+    # ==========================================================================
+    # PDF conversion helpers
+    # ==========================================================================
+
+    def get_papers_with_pdf_without_markdown(self, limit: int = 20) -> list[dict]:
+        """Return papers that have a PDF but no Markdown yet."""
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT p.* FROM papers p
+                   WHERE p.pdf_path IS NOT NULL
+                     AND (p.md_path IS NULL OR p.md_path = '')
+                   ORDER BY p.paper_id DESC LIMIT ?""",
+                (limit,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"get_papers_with_pdf_without_markdown failed: {e}")
+            return []
+        finally:
+            conn.close()
+
+    def update_paper_markdown_status(self, paper_id: int, md_path: str) -> bool:
+        """Set the md_path on a paper row."""
+        conn = self.db.get_connection()
+        try:
+            conn.execute(
+                "UPDATE papers SET md_path = ?, updated_at = CURRENT_TIMESTAMP WHERE paper_id = ?",
+                (md_path, paper_id),
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"update_paper_markdown_status failed: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def record_full_text(self, result) -> bool:
+        """Insert or replace a row in the full_texts table from a ConversionResult."""
+        conn = self.db.get_connection()
+        try:
+            conn.execute(
+                """INSERT OR REPLACE INTO full_texts
+                   (paper_id, content, section_count, figure_count,
+                    table_count, equation_count, ref_count, char_count)
+                   VALUES (?, ?, ?, ?, ?, 0, ?, ?)""",
+                (
+                    result.paper_id,
+                    "",
+                    len(getattr(result, "sections", []) or []),
+                    getattr(result, "figures_count", 0) or 0,
+                    getattr(result, "tables_count", 0) or 0,
+                    getattr(result, "references_count", 0) or 0,
+                    getattr(result, "char_count", 0) or 0,
+                ),
+            )
+            conn.commit()
+            return True
+        except Exception as e:
+            logger.error(f"record_full_text failed: {e}")
+            return False
+        finally:
+            conn.close()
+
+    def get_conversion_statistics(self) -> dict:
+        """Return PDF conversion summary statistics."""
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute("SELECT COUNT(*) FROM papers WHERE pdf_path IS NOT NULL AND pdf_path != ''")
+            with_pdf = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM papers WHERE md_path IS NOT NULL AND md_path != ''")
+            with_md = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM full_texts")
+            full_text_count = cursor.fetchone()[0]
+            cursor.execute("SELECT COUNT(*) FROM papers")
+            total_papers = cursor.fetchone()[0]
+            return {
+                "total_papers": total_papers,
+                "with_pdf": with_pdf,
+                "with_markdown": with_md,
+                "full_text_records": full_text_count,
+                "pending": max(0, with_pdf - with_md),
+            }
+        except Exception as e:
+            logger.error(f"get_conversion_statistics failed: {e}")
+            return {}
+        finally:
+            conn.close()
