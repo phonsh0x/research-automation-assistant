@@ -14,6 +14,15 @@ _CSS = """
     font-family: "Microsoft YaHei", "PingFang SC", "Helvetica Neue", sans-serif;
 }
 
+/* --- Hide default Streamlit chrome --- */
+#MainMenu, header[data-testid="stHeader"], [data-testid="stToolbar"],
+[data-testid="stDecoration"], footer, .stDeployButton {
+    display: none !important;
+}
+[data-testid="stSidebarNav"] {
+    display: none !important;
+}
+
 /* --- Stats cards (home page) --- */
 [data-testid="stMetric"] {
     background-color: #f8f9fa;

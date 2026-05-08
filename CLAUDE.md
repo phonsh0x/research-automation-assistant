@@ -50,7 +50,7 @@ python run.py api      # 启动 FastAPI 后端 (http://localhost:8000)
 - **交互控件必须显式 `key=`**：`st.button` / `st.text_input` / `st.number_input` / `st.selectbox` / `st.multiselect` / `st.checkbox` / `st.radio` / `st.text_area` / `st.slider` / `st.file_uploader` / `st.download_button` / `st.data_editor` / `st.form`
 - **布局 API 不得传 key**（streamlit==1.39.1 不支持）：`st.tabs` / `st.columns` / `st.container` / `st.expander` / `st.form_submit_button`
 - **新增 UI 功能必须拆到子模块**，不允许继续往 `ui/app.py` 塞大段代码：
-  - `ui/pages/` — 页面级组件
+  - `ui/views/` — 页面级组件
   - `ui/components/` — 可复用小组件
   - `ui/services/` — 后端调用封装
 - **session_state 键统一在 `ui/state.py` 中管理**

@@ -31,7 +31,7 @@ import streamlit as st
 from ui.state import ui_key, init_session_state, clear_search_state, clear_fulltext_state, set_page_message
 from ui.constants import PAGE_OPTIONS, VERSION_LABEL, TECH_STACK_LABEL
 from ui.styles import apply_page_config, apply_global_styles
-from ui.pages import PAGE_RENDERERS
+from ui.views import PAGE_RENDERERS
 
 # ============================================================================
 # 页面配置（必须是第一个 Streamlit 命令）
