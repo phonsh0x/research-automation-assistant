@@ -108,7 +108,7 @@ def get_paper_detail(paper_id: int) -> dict:
         repo = get_repository()
         paper = repo.get_paper_by_id(paper_id)
         if paper is None:
-            return {"success": False, "data": None, "message": f"论文 ID {paper_id} 不存在", "error": None}
+            return {"success": False, "data": None, "message": "该论文不存在", "error": None}
         return {"success": True, "data": paper, "message": "", "error": None}
     except Exception as exc:
         _log.error("get_paper_detail(%d) failed: %s", paper_id, exc)

@@ -164,7 +164,7 @@ def handle_manual_upload(paper_id: int, uploaded_file, user_confirmed_rights: bo
             return {
                 "success": False,
                 "data": None,
-                "message": f"论文 ID {paper_id} 不存在",
+                "message": "该论文不存在",
                 "error": None,
             }
 

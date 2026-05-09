@@ -414,7 +414,7 @@ class TestFullTextAcquisitionService:
         service = FullTextAcquisitionService()
         result = service.acquire_single({})
         assert result.success is False
-        assert "paper_id" in result.error_message
+        assert "论文数据不完整" in result.error_message
 
 
 # ============================================================================

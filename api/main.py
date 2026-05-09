@@ -290,7 +290,11 @@ async def fulltext_mark_manual_review(paper_id: int, request: dict = None):
 
 @app.post("/api/v1/fulltext/manual-upload/{paper_id}")
 async def fulltext_manual_upload(paper_id: int, request: dict = None):
-    """处理用户手动上传的 PDF 文件。"""
+    """处理用户手动上传的 PDF 文件。
+
+    .. deprecated::
+        该接口为旧版兼容接口，推荐使用自动上传归档任务 (pdf_upload_ingest)。
+    """
     pdf_path = request.get("pdf_path", "") if request else ""
     user_confirmed_rights = request.get("user_confirmed_rights", False) if request else False
 
@@ -301,7 +305,7 @@ async def fulltext_manual_upload(paper_id: int, request: dict = None):
         repo = PaperRepository()
         paper = repo.get_paper_by_id(paper_id)
         if not paper:
-            return {"error": f"论文 ID {paper_id} 不存在"}
+            return {"error": "该论文不存在"}
 
         if not pdf_path:
             return {"error": "pdf_path 参数为必填项"}

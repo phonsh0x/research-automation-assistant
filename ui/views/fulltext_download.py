@@ -417,29 +417,32 @@ def _render_institution_section():
     )
     st.session_state[KEY_INSTITUTION_ACCESS_CONFIRMED] = confirmed
 
-    debug_id = st.number_input(
-        "论文 ID", min_value=1, step=1, value=1,
-        key=ui_key("fulltext", "institution_paper_id"),
-    )
-    if st.button("通过校园网授权访问下载", key=ui_key("fulltext", "institution_download"),
-                 type="primary", use_container_width=True, disabled=not confirmed):
-        if not confirmed:
-            st.warning("请先勾选机构授权确认。")
-        else:
-            with st.status("正在通过机构网络获取...", expanded=True) as status:
-                r = download_fulltext(debug_id, user_confirmed_institution=True)
-                if r["success"] and r["data"]:
-                    d = r["data"]
-                    st.session_state[KEY_FT_LAST_DOWNLOAD_RESULT] = d
-                    if d.get("pdf_path"):
-                        st.success(f"机构下载成功: {d['pdf_path']}")
-                        status.update(label="下载完成", state="complete")
+    # TODO(Phase 2.3.1): 改为对当前勾选论文执行机构访问，而非要求用户输入 paper_id
+    with st.expander("通过论文 ID 下载（过渡期）", expanded=False):
+        st.caption("此入口为过渡方案。请在 PDF 转换页面勾选论文后使用批量操作。")
+        debug_id = st.number_input(
+            "论文 ID", min_value=1, step=1, value=1,
+            key=ui_key("fulltext", "institution_paper_id"),
+        )
+        if st.button("通过校园网授权访问下载", key=ui_key("fulltext", "institution_download"),
+                     type="primary", use_container_width=True, disabled=not confirmed):
+            if not confirmed:
+                st.warning("请先勾选机构授权确认。")
+            else:
+                with st.status("正在通过机构网络获取...", expanded=True) as status:
+                    r = download_fulltext(debug_id, user_confirmed_institution=True)
+                    if r["success"] and r["data"]:
+                        d = r["data"]
+                        st.session_state[KEY_FT_LAST_DOWNLOAD_RESULT] = d
+                        if d.get("pdf_path"):
+                            st.success(f"机构下载成功: {d['pdf_path']}")
+                            status.update(label="下载完成", state="complete")
+                        else:
+                            st.warning(f"下载失败: {d.get('error_message')}")
+                            status.update(label="下载失败", state="error")
                     else:
-                        st.warning(f"下载失败: {d.get('error_message')}")
-                        status.update(label="下载失败", state="error")
-                else:
-                    st.error(f"下载失败: {r['error']}")
-                    status.update(label="失败", state="error")
+                        st.error(f"下载失败: {r['error']}")
+                        status.update(label="失败", state="error")
 
 
 # ============================================================================

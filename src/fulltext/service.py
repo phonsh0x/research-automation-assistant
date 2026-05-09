@@ -66,7 +66,7 @@ class FullTextAcquisitionService:
             return FullTextResult(
                 paper_id=paper_id,
                 access_status="failed", legal_status="unknown",
-                error_message=f"论文 ID {paper_id} 不存在",
+                error_message="该论文不存在",
             )
 
         logger.info(f"开始解析全文来源: paper_id={paper_id}")
@@ -244,7 +244,7 @@ class FullTextAcquisitionService:
             return FullTextResult(
                 paper_id=None,
                 access_status="failed",
-                error_message="论文数据中缺少 paper_id",
+                error_message="论文数据不完整，无法获取全文",
             )
         return self.download(paper_id)
 

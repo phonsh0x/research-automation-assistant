@@ -91,6 +91,7 @@ def render():
     for p in pending_papers:
         pid = p["paper_id"]
         title = p.get("title") or "未命名论文"
+        safe_title = "".join(c for c in title if c.isalnum() or c in " _-")[:60].strip() or "converted_paper"
         authors = p.get("authors") or "未知"
         if len(authors) > 80:
             authors = authors[:80] + "..."
@@ -141,7 +142,7 @@ def render():
                                     st.caption(f"... 还有 {len(md_text) - 8000} 字符未显示。")
                             st.download_button(
                                 "下载 Markdown", data=md_text,
-                                file_name=f"paper_{pid}.md", mime="text/markdown",
+                                file_name=f"{safe_title}.md", mime="text/markdown",
                                 key=ui_key("pdf_convert_dl", pid),
                             )
                         else:
