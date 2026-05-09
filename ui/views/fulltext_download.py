@@ -454,20 +454,28 @@ def _render_manual_upload_section():
     render_section("人工上传 PDF")
     st.caption("系统将自动从 PDF 提取 DOI 和标题，匹配已有论文或新建记录。无需手动输入 ID。")
 
-    rights_ok = st.checkbox(
+    st.checkbox(
         "我确认该 PDF 来自合法途径，并有权在课题组内部科研使用。",
-        value=st.session_state.get(KEY_FT_UPLOAD_RIGHTS_CONFIRMED, False),
         key=KEY_FT_UPLOAD_RIGHTS_CONFIRMED,
     )
 
+    rights_ok = bool(st.session_state.get(KEY_FT_UPLOAD_RIGHTS_CONFIRMED, False))
+
     upload_files = st.file_uploader(
-        "选择 PDF 文件（可多选）", type=["pdf"], accept_multiple_files=True,
+        "选择 PDF 文件（可多选）",
+        type=["pdf"],
+        accept_multiple_files=True,
         key=ui_key("fulltext", "upload_files"),
     )
 
     if upload_files:
-        if st.button("上传并自动归档", key=ui_key("fulltext", "upload_btn"),
-                     type="primary", disabled=not rights_ok):
+        upload_clicked = st.button(
+            "上传并自动归档",
+            key=ui_key("fulltext", "upload_btn"),
+            type="primary",
+        )
+
+        if upload_clicked:
             if not rights_ok:
                 st.warning("请先确认版权合规。")
             else:
