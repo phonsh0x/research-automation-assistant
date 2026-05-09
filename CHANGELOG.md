@@ -27,6 +27,41 @@
 
 ---
 
+## [Phase 2.3.1] — 2026-05-09 后台任务加固 & 路径统一
+
+### 后台任务系统 (B0-A)
+- `9d56b62` feat: add background jobs and automatic pdf upload ingestion
+- `f7db54d` feat: harden background job recovery
+- TaskManager + ThreadPoolExecutor + stale running job 恢复
+- JobRepository 便捷方法（mark_job_running/success/failed/interrupted）
+- JobStatus 新增 INTERRUPTED 状态
+- 测试隔离：tmp_path 临时数据库 + uuid checksum
+
+### 路径统一 (B1-B6)
+- `5f9bfec` feat: add centralized file path resolver — `src/files/path_resolver.py`
+- `8a18066` fix: use centralized path resolver for upload ingestion
+- `77bfd5f` refactor: use path resolver in pdf conversion ui service
+- `197a918` refactor: use path resolver for pdf conversion outputs
+- `bc3c121` feat: add storage path normalization for legacy db paths
+- `d7d72e5` fix: normalize stored paths before file-existence checks in pdf conversion
+
+### 当前路径策略
+- **写入 DB**: `to_portable_path()` → 保存 `data/xxx/yyy` 格式，正斜杠
+- **读取 DB**: `normalize_storage_path()` → 兼容旧 Windows 绝对路径、反斜杠、缺少/重复 data/ 前缀
+- **文件检查**: `normalize_storage_path()` → `resolve_project_path()` → `is_file()`
+- 不再依赖 CWD，不再硬编码 `Path("data/pdf")`
+
+### UI 修复
+- `14121be` fix: remove user-facing paper id remnants — 普通界面不显示内部 ID
+- `f7db54d` fix: remove empty streamlit widget labels — 3 处 `st.checkbox("")` 修复
+
+### 测试
+- **245 passed**, 0 failed
+- 新增 `tests/test_path_resolver.py` (71 tests)
+- 新增 `tests/test_background_jobs.py` (31 tests, 完整隔离)
+
+---
+
 ## [Phase 1] — 2026-05-07 项目骨架版
 
 ### 已完成
