@@ -250,14 +250,18 @@ def build_pdf_storage_path(title: str, doi: str = "", year: int | None = None,
 
 
 def build_markdown_storage_path(title: str, paper_id: int | None = None,
-                                avoid_overwrite: bool = True) -> Path:
+                                avoid_overwrite: bool = True,
+                                output_dir: Path | None = None) -> Path:
     """Build an absolute path under ``data/markdown/`` for a Markdown file.
 
     The filename uses *title*.  *paper_id* is only added as a
     disambiguation suffix when *avoid_overwrite* would otherwise cause a
     collision — it never appears in the primary filename.
+
+    When *output_dir* is given it overrides the default ``data/markdown``
+    directory, which allows tests to point at a temporary location.
     """
-    md_dir = get_data_path("data/markdown")
+    md_dir = output_dir if output_dir is not None else get_data_path("data/markdown")
     stem = safe_filename(title, max_length=120)
     if not stem or stem == "untitled":
         stem = f"paper_{paper_id}" if paper_id else "converted_paper"

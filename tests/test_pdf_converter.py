@@ -121,6 +121,74 @@ class TestPDFConverter:
         assert len(results) == 3
         assert all(r.status == "success" for r in results)
 
+    def test_md_path_is_portable_when_under_project_root(self, tmp_path):
+        """md_path must be relative with forward slashes when output is under PROJECT_ROOT."""
+        from src.pdf_converter import PDFConverter
+        from src.config import PROJECT_ROOT
+
+        pdf_path = _create_minimal_pdf(tmp_path / "portable_test.pdf", "Portable path test content.")
+        c = PDFConverter()
+        # Use a subdirectory of PROJECT_ROOT so to_portable_path returns relative
+        c.output_dir = PROJECT_ROOT / "data" / "markdown"
+        c.output_dir.mkdir(parents=True, exist_ok=True)
+
+        result = c.convert(pdf_path)
+        assert result.status == "success", f"Error: {result.error_message}"
+        md_path = result.md_path
+        # Must be relative (no project root prefix)
+        root_str = str(PROJECT_ROOT).replace("\\", "/")
+        assert root_str not in md_path, f"md_path contains project root: {md_path}"
+        # Must use forward slashes
+        assert "\\" not in md_path, f"md_path has backslashes: {md_path}"
+        # Must start with data/markdown/
+        assert md_path.startswith("data/markdown/"), f"Unexpected prefix: {md_path}"
+        # Must end with .md
+        assert md_path.endswith(".md")
+        # File must physically exist
+        real_file = PROJECT_ROOT / md_path
+        assert real_file.is_file(), f"File not found: {real_file}"
+        # Clean up test artifact
+        real_file.unlink(missing_ok=True)
+
+    def test_same_title_does_not_overwrite(self, tmp_path):
+        """Two conversions with identical safe stems must produce distinct .md files."""
+        from src.pdf_converter import PDFConverter
+
+        # Both PDFs share the same first line so they extract the same title,
+        # which causes build_markdown_storage_path to produce the same base stem.
+        shared_first_line = "Dedup Test Title"
+        pdf1 = _create_minimal_pdf(
+            tmp_path / "a.pdf",
+            f"{shared_first_line}\nBody from first PDF.\nIntroduction\nThe first body.",
+        )
+        pdf2 = _create_minimal_pdf(
+            tmp_path / "b.pdf",
+            f"{shared_first_line}\nBody from second PDF.\nIntroduction\nThe second body.",
+        )
+
+        c = PDFConverter()
+        c.output_dir = tmp_path / "md_dedup"
+        c.output_dir.mkdir()
+
+        r1 = c.convert(pdf1)
+        assert r1.status == "success", f"r1 failed: {r1.error_message}"
+        r2 = c.convert(pdf2)
+        assert r2.status == "success", f"r2 failed: {r2.error_message}"
+
+        # Paths must differ — build_markdown_storage_path appended a timestamp
+        assert r1.md_path != r2.md_path, \
+            f"Same md_path for different conversions: {r1.md_path}"
+
+        # Both files must actually exist on disk
+        f1 = Path(r1.md_path) if Path(r1.md_path).is_absolute() else tmp_path / "md_dedup" / r1.md_path
+        f2 = Path(r2.md_path) if Path(r2.md_path).is_absolute() else tmp_path / "md_dedup" / r2.md_path
+        assert f1.is_file(), f"First MD file missing: {f1}"
+        assert f2.is_file(), f"Second MD file missing: {f2}"
+
+        # First file's content must not have been overwritten by second
+        content1 = f1.read_text(encoding="utf-8")
+        assert "first" in content1, "First file was overwritten by second"
+
 
 # ============================================================================
 # Quality scoring

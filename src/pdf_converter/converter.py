@@ -7,6 +7,7 @@ from pathlib import Path
 import fitz
 
 from src.config import get_config, get_data_path
+from src.files.path_resolver import build_markdown_storage_path, to_portable_path
 from src.pdf_converter.models import ConversionResult, PDFMetadata, PDFSection
 from src.pdf_converter.quality import compute_quality_score
 from src.utils.logger import get_logger
@@ -58,14 +59,17 @@ class PDFConverter:
             sections = self._extract_sections(doc)
             full_text = self._build_markdown(metadata, sections)
 
-            md_filename = pdf_path.stem + ".md"
-            md_path = self.output_dir / md_filename
+            # Build a safe, deduplicated Markdown output path
+            title = metadata.title or pdf_path.stem
+            md_path = build_markdown_storage_path(
+                title, avoid_overwrite=True, output_dir=self.output_dir,
+            )
             md_path.write_text(full_text, encoding="utf-8")
 
             word_count = len(full_text.split())
             char_count = len(full_text)
 
-            result.md_path = str(md_path)
+            result.md_path = to_portable_path(md_path)
             result.title = metadata.title
             result.abstract = metadata.abstract
             result.sections = sections
