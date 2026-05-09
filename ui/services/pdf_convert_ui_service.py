@@ -1,45 +1,36 @@
 """PDF-to-Markdown conversion UI service."""
 
-from pathlib import Path
-
+from src.files.path_resolver import (
+    pdf_status,
+    resolve_project_path,
+)
 from src.utils.logger import get_logger
 from ui.services.repository_service import get_repository, clear_cached_stats
 
 _log = get_logger("ui.pdf_convert_ui_service")
 
-# Project root for resolving relative pdf/md paths
-_PROJECT_ROOT = Path(__file__).resolve().parent.parent.parent
 
+def _resolve_for_read(raw: str | None):
+    """Resolve a stored path (possibly relative) to an absolute path for reading.
 
-def _resolve_path(raw: str | None) -> Path | None:
-    """Resolve a possibly-relative path against the project root."""
+    Returns the resolved :class:`~pathlib.Path` when the file exists,
+    or ``None`` otherwise.
+    """
     if not raw:
         return None
-    p = Path(raw)
-    if p.is_absolute():
-        return p if p.exists() else None
-    resolved = _PROJECT_ROOT / p
-    return resolved if resolved.exists() else None
+    p = resolve_project_path(raw)
+    return p if p.is_file() else None
 
 
-def _pdf_status(raw_path: str | None) -> tuple[bool, str]:
-    """Return (available, label) for a pdf_path."""
+def _md_label(raw_path: str | None) -> tuple[bool, str]:
+    """Return ``(ok, label)`` for an md_path, using UI-friendly labels."""
     if not raw_path:
-        return False, "路径缺失"
-    resolved = _resolve_path(raw_path)
-    if resolved is None:
-        return False, "文件不存在"
-    if resolved.suffix.lower() != ".pdf":
+        return False, "未转换"
+    resolved = resolve_project_path(raw_path)
+    if resolved is None or not resolved.is_file():
+        return False, "未转换"
+    if resolved.suffix.lower() != ".md":
         return False, "格式异常"
-    return True, "已存在"
-
-
-def _md_status(raw_path: str | None) -> tuple[bool, str]:
-    """Return (available, label) for an md_path."""
-    if not raw_path:
-        return False, "未转换"
-    if _resolve_path(raw_path) is None:
-        return False, "未转换"
     return True, "已转换"
 
 
@@ -61,9 +52,9 @@ def get_pending_papers(limit: int = 20) -> dict:
         papers = []
         for p in raw:
             pdf_path = p.get("pdf_path")
-            pdf_avail, pdf_label = _pdf_status(pdf_path)
+            pdf_avail, pdf_label = pdf_status(pdf_path)
             md_path = p.get("md_path")
-            md_avail, md_label = _md_status(md_path)
+            md_avail, md_label = _md_label(md_path)
 
             papers.append({
                 "paper_id": p.get("paper_id"),
@@ -103,7 +94,7 @@ def convert_single(paper_id: int) -> dict:
             return {"success": False, "data": None, "message": "该论文不存在", "error": None}
 
         pdf_path = paper.get("pdf_path", "")
-        resolved = _resolve_path(pdf_path)
+        resolved = _resolve_for_read(pdf_path)
         if resolved is None:
             return {"success": False, "data": None, "message": "",
                     "error": "当前论文没有可用的 PDF 文件，请先在全文获取页面下载或手动上传 PDF。"}
@@ -141,7 +132,7 @@ def convert_batch(limit: int = 10) -> dict:
         for p in papers:
             pid = p.get("paper_id")
             pdf_path = p.get("pdf_path", "")
-            resolved = _resolve_path(pdf_path)
+            resolved = _resolve_for_read(pdf_path)
             if resolved is None:
                 results_data.append({"paper_id": pid, "status": "skipped", "error_message": "缺少可用 PDF 文件"})
                 continue
@@ -178,7 +169,7 @@ def get_markdown_preview(paper_id: int) -> dict:
             return {"success": False, "data": None, "message": "该论文不存在", "error": None}
 
         md_path = paper.get("md_path", "")
-        resolved = _resolve_path(md_path)
+        resolved = _resolve_for_read(md_path)
         if resolved is None:
             return {"success": False, "data": None, "message": "", "error": "Markdown 文件不存在，请先转换"}
 
@@ -213,7 +204,7 @@ def convert_selected(paper_ids: list[int]) -> dict:
                 continue
 
             pdf_path = paper.get("pdf_path", "")
-            resolved = _resolve_path(pdf_path)
+            resolved = _resolve_for_read(pdf_path)
             if resolved is None:
                 results_data.append({"paper_id": pid, "status": "skipped", "error_message": "缺少可用 PDF 文件"})
                 skipped += 1
