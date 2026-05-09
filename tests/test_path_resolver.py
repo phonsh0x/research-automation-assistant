@@ -286,6 +286,68 @@ class TestSafeFilename:
 # build_pdf_storage_path
 # ---------------------------------------------------------------------------
 
+# ---------------------------------------------------------------------------
+# normalize_storage_path — legacy DB value compatibility
+# ---------------------------------------------------------------------------
+
+class TestNormalizeStoragePath:
+    def test_none_returns_none(self, resolver):
+        assert resolver.normalize_storage_path(None) is None
+
+    def test_empty_returns_none(self, resolver):
+        assert resolver.normalize_storage_path("") is None
+
+    def test_already_portable_passes_through(self, resolver):
+        result = resolver.normalize_storage_path("data/markdown/paper.md")
+        assert result == "data/markdown/paper.md"
+
+    def test_already_portable_pdf(self, resolver):
+        result = resolver.normalize_storage_path("data/pdf/paper.pdf")
+        assert result == "data/pdf/paper.pdf"
+
+    def test_backslash_normalised(self, resolver):
+        result = resolver.normalize_storage_path("data\\markdown\\paper.md")
+        assert "\\" not in result
+        assert result == "data/markdown/paper.md"
+
+    def test_absolute_windows_path_under_project(self, resolver, project_root):
+        abs_path = str(project_root / "data" / "markdown" / "x.md").replace("/", "\\")
+        result = resolver.normalize_storage_path(abs_path)
+        assert result == "data/markdown/x.md"
+        assert "\\" not in result
+
+    def test_missing_data_prefix_pdf(self, resolver):
+        result = resolver.normalize_storage_path("pdf/paper.pdf")
+        assert result == "data/pdf/paper.pdf"
+
+    def test_missing_data_prefix_markdown(self, resolver):
+        result = resolver.normalize_storage_path("markdown/paper.md")
+        assert result == "data/markdown/paper.md"
+
+    def test_missing_data_prefix_uploads(self, resolver):
+        result = resolver.normalize_storage_path("uploads/file.pdf")
+        assert result == "data/uploads/file.pdf"
+
+    def test_doubled_data_prefix(self, resolver):
+        result = resolver.normalize_storage_path("data/data/markdown/paper.md")
+        assert result == "data/markdown/paper.md"
+
+    def test_absolute_path_outside_project_kept_as_is(self, resolver, tmp_path):
+        outside = str(tmp_path / "some.pdf").replace("/", "\\")
+        result = resolver.normalize_storage_path(outside)
+        assert "\\" not in result
+        # Outside project root — stays absolute but normalised
+        assert result.startswith(str(tmp_path).replace("\\", "/")[:10])
+
+    def test_leading_dot_slash_stripped(self, resolver):
+        result = resolver.normalize_storage_path("./data/pdf/x.pdf")
+        assert result == "data/pdf/x.pdf"
+
+    def test_doubled_slashes_collapsed(self, resolver):
+        result = resolver.normalize_storage_path("data//markdown//paper.md")
+        assert result == "data/markdown/paper.md"
+
+
 class TestBuildPdfStoragePath:
     def test_returns_under_data_pdf(self, resolver):
         p = resolver.build_pdf_storage_path("My Paper", year=2024)

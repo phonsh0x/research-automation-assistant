@@ -1,6 +1,7 @@
 """PDF-to-Markdown conversion UI service."""
 
 from src.files.path_resolver import (
+    normalize_storage_path,
     pdf_status,
     resolve_project_path,
 )
@@ -11,22 +12,24 @@ _log = get_logger("ui.pdf_convert_ui_service")
 
 
 def _resolve_for_read(raw: str | None):
-    """Resolve a stored path (possibly relative) to an absolute path for reading.
+    """Resolve a stored path (possibly legacy format) to an absolute path for reading.
 
     Returns the resolved :class:`~pathlib.Path` when the file exists,
     or ``None`` otherwise.
     """
-    if not raw:
+    normalised = normalize_storage_path(raw)
+    if not normalised:
         return None
-    p = resolve_project_path(raw)
+    p = resolve_project_path(normalised)
     return p if p.is_file() else None
 
 
 def _md_label(raw_path: str | None) -> tuple[bool, str]:
     """Return ``(ok, label)`` for an md_path, using UI-friendly labels."""
-    if not raw_path:
+    normalised = normalize_storage_path(raw_path)
+    if not normalised:
         return False, "未转换"
-    resolved = resolve_project_path(raw_path)
+    resolved = resolve_project_path(normalised)
     if resolved is None or not resolved.is_file():
         return False, "未转换"
     if resolved.suffix.lower() != ".md":

@@ -2,6 +2,7 @@
 
 from src.files.path_resolver import (
     get_project_root,
+    normalize_storage_path,
     resolve_project_path,
     to_relative_path,
     to_portable_path,
@@ -20,6 +21,7 @@ from src.files.path_resolver import (
 
 __all__ = [
     "get_project_root",
+    "normalize_storage_path",
     "resolve_project_path",
     "to_relative_path",
     "to_portable_path",

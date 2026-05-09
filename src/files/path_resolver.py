@@ -88,6 +88,57 @@ def to_portable_path(path: str | Path) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Legacy path normalisation
+# ---------------------------------------------------------------------------
+
+
+def normalize_storage_path(raw: str | None) -> str | None:
+    """Normalize a stored path string to the canonical ``data/xxx/yyy`` format.
+
+    Handles legacy formats that may still exist in databases:
+    - Absolute Windows paths: ``F:\\Agent\\...\\data\\markdown\\a.md``
+    - Backslash separators: ``data\\\\markdown\\\\a.md``
+    - Missing ``data/`` prefix: ``markdown/a.md`` → ``data/markdown/a.md``
+    - Doubled ``data/`` prefix: ``data/data/markdown/a.md`` → ``data/markdown/a.md``
+    - Already portable paths pass through unchanged.
+
+    Returns ``None`` when *raw* is empty or ``None``.
+    """
+    if not raw:
+        return None
+
+    p = Path(raw)
+
+    # 1. If absolute, try to make it relative to the project root
+    if p.is_absolute():
+        try:
+            p = p.resolve().relative_to(get_project_root().resolve())
+        except ValueError:
+            # Outside project root — normalise slashes and return as-is
+            return p.as_posix()
+
+    # 2. Normalise to forward slashes
+    normalised = p.as_posix()
+
+    # 3. Strip leading "./" if present
+    normalised = re.sub(r"^\./", "", normalised)
+
+    # 4. Fix doubled "data/data/" prefix
+    normalised = re.sub(r"^data/data/", "data/", normalised)
+
+    # 5. Add missing "data/" prefix for known subdirectories
+    for prefix in ("pdf/", "markdown/", "uploads/"):
+        if normalised.startswith(prefix):
+            normalised = "data/" + normalised
+            break
+
+    # 6. Collapse any doubled slashes introduced during fixup
+    normalised = re.sub(r"//+", "/", normalised)
+
+    return normalised or None
+
+
+# ---------------------------------------------------------------------------
 # Directory helpers
 # ---------------------------------------------------------------------------
 
