@@ -298,7 +298,62 @@ class TestTaskManager:
             repo = PaperRepository(db=DatabaseManager(db_path))
             paper = repo.get_paper_by_doi("10.9999/avail.2026")
             assert paper is not None, "Paper should exist in test db after upload"
-            assert paper.get("pdf_path"), "PDF path should be set after upload"
+            pdf_path = paper.get("pdf_path")
+            assert pdf_path, "PDF path should be set after upload"
+            # Path must be portable (forward slashes, no machine prefix)
+            assert "\\" not in pdf_path, f"pdf_path contains backslashes: {pdf_path}"
+            assert pdf_path.startswith("data/pdf/"), f"pdf_path not relative: {pdf_path}"
+            # File must actually exist on disk under the project root
+            from src.config import PROJECT_ROOT
+            assert (PROJECT_ROOT / pdf_path).is_file(), \
+                f"PDF file not found on disk at {PROJECT_ROOT / pdf_path}"
+        finally:
+            mgr.shutdown(wait=True)
+
+    def test_upload_pdf_path_is_portable(self, tmp_path):
+        """pdf_path stored in the DB must be relative with forward slashes."""
+        import fitz
+
+        db_path = str(tmp_path / "test_mgr_portable.db")
+        _init_temp_db(db_path)
+        mgr = _make_task_manager(db_path)
+
+        staged = tmp_path / "portable_test.pdf"
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((72, 72),
+                         "Portable Path Test\nDOI: 10.9999/portable.2026",
+                         fontsize=12)
+        doc.save(str(staged))
+        doc.close()
+
+        try:
+            job_id = mgr.submit("pdf_upload_ingest", "Portable path test",
+                                {"files": [{"path": str(staged), "name": "portable_test.pdf"}]})
+            for _ in range(20):
+                time.sleep(0.3)
+                if mgr.get_job(job_id)["status"] in ("success", "failed"):
+                    break
+
+            from src.database.connection import DatabaseManager
+            from src.storage.repository import PaperRepository
+            repo = PaperRepository(db=DatabaseManager(db_path))
+            paper = repo.get_paper_by_doi("10.9999/portable.2026")
+            assert paper is not None
+
+            pdf_path = paper.get("pdf_path", "")
+            # Must not contain absolute prefix
+            from src.config import PROJECT_ROOT
+            root_str = str(PROJECT_ROOT).replace("\\", "/")
+            assert root_str not in pdf_path, \
+                f"pdf_path contains project root: {pdf_path}"
+            # Must use forward slashes
+            assert "\\" not in pdf_path
+            # Must start with data/pdf/
+            assert pdf_path.startswith("data/pdf/"), \
+                f"Expected data/pdf/ prefix, got: {pdf_path}"
+            # Must end with .pdf
+            assert pdf_path.endswith(".pdf")
         finally:
             mgr.shutdown(wait=True)
 

@@ -17,6 +17,7 @@ from difflib import SequenceMatcher
 from pathlib import Path
 
 from src.fulltext.pdf_metadata import extract_metadata
+from src.files.path_resolver import ensure_directory, to_portable_path
 from src.storage.repository import PaperRepository
 from src.tasks.repository import JobRepository
 from src.utils.logger import get_logger
@@ -59,9 +60,8 @@ def _process_one(staged_path: Path, original_name: str, db_path: str = "") -> di
         return {"status": "duplicate", "filename": original_name, "doi": "",
                 "title": "", "message": "文件已存在（SHA256 重复）"}
 
-    # Move to data/pdf
-    inbox = Path("data/pdf")
-    inbox.mkdir(parents=True, exist_ok=True)
+    # Move to data/pdf (resolved against project root)
+    inbox = ensure_directory("data/pdf")
     dest = inbox / original_name
     if dest.exists():
         stem, suffix = dest.stem, dest.suffix
@@ -78,7 +78,7 @@ def _process_one(staged_path: Path, original_name: str, db_path: str = "") -> di
 
     # Insert upload record
     upload_id = job_repo.insert_upload(
-        filename=original_name, stored_path=str(dest), file_size=file_size,
+        filename=original_name, stored_path=to_portable_path(dest), file_size=file_size,
         checksum=checksum, doi=doi, title=title, year=year, authors=authors,
     )
 
@@ -112,7 +112,7 @@ def _process_one(staged_path: Path, original_name: str, db_path: str = "") -> di
     if matched_paper:
         paper_id = matched_paper.get("paper_id") or matched_paper.get("id")
         repo.update_paper_pdf_status(
-            paper_id=paper_id, pdf_path=str(dest),
+            paper_id=paper_id, pdf_path=to_portable_path(dest),
             download_status="downloaded", access_source="manual_upload",
             legal_status="user_provided",
         )
@@ -121,7 +121,7 @@ def _process_one(staged_path: Path, original_name: str, db_path: str = "") -> di
             title=title or matched_paper.get("title", ""),
             access_status="manual_upload", access_source="manual_upload",
             access_mode="manual", legal_status="user_provided",
-            pdf_path=str(dest), file_size=file_size, checksum_sha256=checksum,
+            pdf_path=to_portable_path(dest), file_size=file_size, checksum_sha256=checksum,
         )
         job_repo.update_upload(upload_id, status="merged", matched_paper_id=paper_id,
                                match_method=match_method, match_score=match_score)
@@ -135,7 +135,7 @@ def _process_one(staged_path: Path, original_name: str, db_path: str = "") -> di
         )
         paper_id, _ = repo.upsert_paper(new_paper)
         repo.update_paper_pdf_status(
-            paper_id=paper_id, pdf_path=str(dest),
+            paper_id=paper_id, pdf_path=to_portable_path(dest),
             download_status="downloaded", access_source="manual_upload",
             legal_status="user_provided",
         )
@@ -143,7 +143,7 @@ def _process_one(staged_path: Path, original_name: str, db_path: str = "") -> di
             paper_id=paper_id, doi=doi, title=title,
             access_status="manual_upload", access_source="manual_upload",
             access_mode="manual", legal_status="user_provided",
-            pdf_path=str(dest), file_size=file_size, checksum_sha256=checksum,
+            pdf_path=to_portable_path(dest), file_size=file_size, checksum_sha256=checksum,
         )
         job_repo.update_upload(upload_id, status="created", matched_paper_id=paper_id,
                                match_method="new", match_score=0.0)
