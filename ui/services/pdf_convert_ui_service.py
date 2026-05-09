@@ -2,7 +2,6 @@
 
 from src.files.path_resolver import (
     normalize_storage_path,
-    pdf_status,
     resolve_project_path,
 )
 from src.utils.logger import get_logger
@@ -54,10 +53,25 @@ def get_pending_papers(limit: int = 20) -> dict:
         raw = repo.get_papers_with_pdf_without_markdown(limit=limit)
         papers = []
         for p in raw:
-            pdf_path = p.get("pdf_path")
-            pdf_avail, pdf_label = pdf_status(pdf_path)
-            md_path = p.get("md_path")
-            md_avail, md_label = _md_label(md_path)
+            raw_pdf = p.get("pdf_path")
+            # Normalize legacy path formats, then resolve to absolute for existence check
+            normalized_pdf = normalize_storage_path(raw_pdf)
+            if normalized_pdf:
+                resolved_pdf = resolve_project_path(normalized_pdf)
+                pdf_avail = resolved_pdf.is_file() and resolved_pdf.suffix.lower() == ".pdf"
+                pdf_label = "已存在" if pdf_avail else (
+                    "格式异常" if resolved_pdf.suffix.lower() != ".pdf" else "文件不存在"
+                )
+            else:
+                pdf_avail = False
+                pdf_label = "路径缺失"
+
+            raw_md = p.get("md_path")
+            md_avail, md_label = _md_label(raw_md)
+
+            # Store the portable path for UI display
+            pdf_path = normalized_pdf or raw_pdf or ""
+            md_path = normalize_storage_path(raw_md) or raw_md or ""
 
             papers.append({
                 "paper_id": p.get("paper_id"),
