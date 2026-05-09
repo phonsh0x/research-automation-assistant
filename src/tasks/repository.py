@@ -36,20 +36,25 @@ class JobRepository:
         finally:
             conn.close()
 
-    def list_jobs(self, status: str | None = None, limit: int = 50) -> list[dict]:
+    def list_jobs(self, status: str | None = None, job_type: str | None = None,
+                  limit: int = 50) -> list[dict]:
         conn = self.db.get_connection()
         try:
             cur = conn.cursor()
+            conditions = []
+            params: list = []
             if status:
-                cur.execute(
-                    "SELECT * FROM background_jobs WHERE status = ? ORDER BY job_id DESC LIMIT ?",
-                    (status, limit),
-                )
-            else:
-                cur.execute(
-                    "SELECT * FROM background_jobs ORDER BY job_id DESC LIMIT ?",
-                    (limit,),
-                )
+                conditions.append("status = ?")
+                params.append(status)
+            if job_type:
+                conditions.append("job_type = ?")
+                params.append(job_type)
+            where = f" WHERE {' AND '.join(conditions)}" if conditions else ""
+            params.append(limit)
+            cur.execute(
+                f"SELECT * FROM background_jobs{where} ORDER BY job_id DESC LIMIT ?",
+                params,
+            )
             return [dict(row) for row in cur.fetchall()]
         finally:
             conn.close()
@@ -70,6 +75,75 @@ class JobRepository:
         except Exception as exc:
             _log.error("update_job(%d) failed: %s", job_id, exc)
             return False
+        finally:
+            conn.close()
+
+    # ---- job status helpers ----
+
+    def get_running_jobs(self) -> list[dict]:
+        """Return all jobs currently in 'running' status."""
+        return self.list_jobs(status="running", limit=9999)
+
+    def update_job_progress(self, job_id: int, current: int, total: int,
+                            message: str = "") -> bool:
+        return self.update_job(
+            job_id, progress_current=current, progress_total=total, message=message,
+        )
+
+    def mark_job_running(self, job_id: int) -> bool:
+        from datetime import datetime
+        return self.update_job(
+            job_id, status="running", started_at=datetime.now().isoformat(),
+        )
+
+    def mark_job_success(self, job_id: int, message: str = "",
+                         result_json: str = "") -> bool:
+        from datetime import datetime
+        kwargs: dict = {"status": "success", "finished_at": datetime.now().isoformat()}
+        if message:
+            kwargs["message"] = message
+        if result_json:
+            kwargs["result_json"] = result_json
+        return self.update_job(job_id, **kwargs)
+
+    def mark_job_failed(self, job_id: int, error_message: str = "") -> bool:
+        from datetime import datetime
+        kwargs: dict = {"status": "failed", "finished_at": datetime.now().isoformat()}
+        if error_message:
+            kwargs["error_message"] = error_message
+        return self.update_job(job_id, **kwargs)
+
+    def mark_job_interrupted(self, job_id: int, message: str = "") -> bool:
+        from datetime import datetime
+        kwargs: dict = {"status": "interrupted",
+                        "finished_at": datetime.now().isoformat()}
+        if message:
+            kwargs["error_message"] = message
+        return self.update_job(job_id, **kwargs)
+
+    def mark_stale_running_jobs_as_interrupted(self) -> int:
+        """Mark all running jobs with no finished_at as interrupted.
+
+        Returns the number of jobs that were cleaned up.
+        """
+        conn = self.db.get_connection()
+        try:
+            cur = conn.cursor()
+            cur.execute(
+                """UPDATE background_jobs
+                   SET status = 'interrupted',
+                       error_message = '上次程序退出导致任务中断',
+                       finished_at = CURRENT_TIMESTAMP
+                   WHERE status = 'running' AND finished_at IS NULL""",
+            )
+            conn.commit()
+            count = cur.rowcount
+            if count > 0:
+                _log.warning("Marked %d stale running job(s) as interrupted", count)
+            return count
+        except Exception as exc:
+            _log.error("mark_stale_running_jobs_as_interrupted failed: %s", exc)
+            return 0
         finally:
             conn.close()
 
