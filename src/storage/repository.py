@@ -972,6 +972,26 @@ class PaperRepository:
         finally:
             conn.close()
 
+    def get_papers_with_markdown(self, limit: int = 20) -> list[dict]:
+        """Return papers that already have a Markdown file."""
+        conn = self.db.get_connection()
+        try:
+            cursor = conn.cursor()
+            cursor.execute(
+                """SELECT p.* FROM papers p
+                   WHERE p.md_path IS NOT NULL
+                     AND p.md_path != ''
+                   ORDER BY p.updated_at DESC, p.paper_id DESC LIMIT ?""",
+                (limit,),
+            )
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"get_papers_with_markdown failed: {e}")
+            return []
+        finally:
+            conn.close()
+
+
     def update_paper_markdown_status(self, paper_id: int, md_path: str) -> bool:
         """Set the md_path on a paper row."""
         conn = self.db.get_connection()

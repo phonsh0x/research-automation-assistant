@@ -100,6 +100,60 @@ def get_pending_papers(limit: int = 20) -> dict:
         return {"success": False, "data": {"papers": [], "count": 0}, "message": "", "error": str(exc)}
 
 
+def get_converted_papers(limit: int = 20) -> dict:
+    """Return papers that already have Markdown, with normalised fields."""
+    try:
+        repo = get_repository()
+        raw = repo.get_papers_with_markdown(limit=limit)
+        papers = []
+
+        for p in raw:
+            raw_pdf = p.get("pdf_path")
+            normalized_pdf = normalize_storage_path(raw_pdf)
+            if normalized_pdf:
+                resolved_pdf = resolve_project_path(normalized_pdf)
+                pdf_avail = resolved_pdf.is_file() and resolved_pdf.suffix.lower() == ".pdf"
+                pdf_label = "\u5df2\u5b58\u5728" if pdf_avail else (
+                    "\u683c\u5f0f\u5f02\u5e38" if resolved_pdf.suffix.lower() != ".pdf" else "\u6587\u4ef6\u4e0d\u5b58\u5728"
+                )
+            else:
+                pdf_avail = False
+                pdf_label = "\u8def\u5f84\u7f3a\u5931"
+
+            raw_md = p.get("md_path")
+            md_avail, md_label = _md_label(raw_md)
+
+            papers.append({
+                "paper_id": p.get("paper_id"),
+                "title": p.get("title") or "\u672a\u547d\u540d\u8bba\u6587",
+                "authors": p.get("authors") or "\u672a\u77e5",
+                "year": p.get("year"),
+                "journal": p.get("journal"),
+                "doi": p.get("doi"),
+                "pdf_path": normalized_pdf or raw_pdf or "",
+                "pdf_available": pdf_avail,
+                "pdf_status_label": pdf_label,
+                "md_path": normalize_storage_path(raw_md) or raw_md or "",
+                "md_available": md_avail,
+                "md_status_label": md_label,
+            })
+
+        return {
+            "success": True,
+            "data": {"papers": papers, "count": len(papers)},
+            "message": "",
+            "error": None,
+        }
+    except Exception as exc:
+        _log.error("get_converted_papers failed: %s", exc)
+        return {
+            "success": False,
+            "data": {"papers": [], "count": 0},
+            "message": "",
+            "error": str(exc),
+        }
+
+
 def convert_single(paper_id: int) -> dict:
     """Convert a single paper's PDF to Markdown."""
     from src.pdf_converter import PDFConverter
