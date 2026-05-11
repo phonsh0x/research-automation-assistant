@@ -27,6 +27,32 @@
 
 ---
 
+## [Phase 2.3.2] — 2026-05-11 PDF 转 Markdown UI 验收
+
+### 已转换 Markdown 展示 (A)
+- `fbe58a3` feat: show converted markdown files in pdf conversion UI
+- PDF 转 Markdown 页面新增"已转换 Markdown"区域
+- 支持已转换 Markdown 文件展示、预览、下载
+- 下载文件名使用安全文件名生成逻辑
+- 批量选择、批量转换、刷新状态、下载功能已通过人工验收
+
+### 异常状态与边界情况 (B)
+- `9f10b12` fix: improve pdf markdown edge status labels
+- `ui/services/pdf_convert_ui_service.py` 新增 `_pdf_label()` helper
+- `_md_label()` 改用 `markdown_status()`，保留 Markdown 缺失显示为"未转换"的 UI 语义
+- `get_pending_papers()` / `get_converted_papers()` 复用状态 helper，减少重复判断逻辑
+- PDF 状态支持：路径缺失 / 文件不存在 / 不是文件 / 文件为空 / 格式异常 / 已存在
+- Markdown 状态支持：未转换 / 不是文件 / 文件为空 / 格式异常 / 已转换
+- `tests/test_pdf_converter.py` 新增 10 个边界情况测试
+
+### 测试
+- Phase 2.3.2-A 合并后：245 passed in 14.15s
+- Phase 2.3.2-B 分支提交后：255 passed in 14.20s
+- Phase 2.3.2-B 合并 master 后：255 passed in 14.60s
+- 当前 master 工作区 clean
+
+---
+
 ## [Phase 2.3.1] — 2026-05-09 后台任务加固 & 路径统一
 
 ### 后台任务系统 (B0-A)
