@@ -294,3 +294,79 @@ class TestUIConversionService:
         result = convert_single(99999999)
         # Should fail gracefully — missing paper or no PDF
         assert result["success"] is False
+
+    def test_pdf_label_none(self):
+        from ui.services.pdf_convert_ui_service import _pdf_label
+        ok, label = _pdf_label(None)
+        assert ok is False
+        assert label == "路径缺失"
+
+    def test_pdf_label_empty_file(self, tmp_path):
+        from ui.services.pdf_convert_ui_service import _pdf_label
+        f = tmp_path / "empty.pdf"
+        f.write_bytes(b"")
+        ok, label = _pdf_label(str(f))
+        assert ok is False
+        assert label == "文件为空"
+
+    def test_pdf_label_directory(self, tmp_path):
+        from ui.services.pdf_convert_ui_service import _pdf_label
+        d = tmp_path / "subdir"
+        d.mkdir()
+        ok, label = _pdf_label(str(d))
+        assert ok is False
+        assert label == "不是文件"
+
+    def test_pdf_label_wrong_suffix(self, tmp_path):
+        from ui.services.pdf_convert_ui_service import _pdf_label
+        f = tmp_path / "notes.txt"
+        f.write_text("hello")
+        ok, label = _pdf_label(str(f))
+        assert ok is False
+        assert label == "格式异常"
+
+    def test_pdf_label_valid(self, tmp_path):
+        from ui.services.pdf_convert_ui_service import _pdf_label
+        f = tmp_path / "ok.pdf"
+        f.write_bytes(b"%PDF-1.4\nx")
+        ok, label = _pdf_label(str(f))
+        assert ok is True
+        assert label == "已存在"
+
+    def test_md_label_none(self):
+        from ui.services.pdf_convert_ui_service import _md_label
+        ok, label = _md_label(None)
+        assert ok is False
+        assert label == "未转换"
+
+    def test_md_label_empty_file(self, tmp_path):
+        from ui.services.pdf_convert_ui_service import _md_label
+        f = tmp_path / "empty.md"
+        f.write_bytes(b"")
+        ok, label = _md_label(str(f))
+        assert ok is False
+        assert label == "文件为空"
+
+    def test_md_label_directory(self, tmp_path):
+        from ui.services.pdf_convert_ui_service import _md_label
+        d = tmp_path / "subdir"
+        d.mkdir()
+        ok, label = _md_label(str(d))
+        assert ok is False
+        assert label == "不是文件"
+
+    def test_md_label_wrong_suffix(self, tmp_path):
+        from ui.services.pdf_convert_ui_service import _md_label
+        f = tmp_path / "notes.txt"
+        f.write_text("hello")
+        ok, label = _md_label(str(f))
+        assert ok is False
+        assert label == "格式异常"
+
+    def test_md_label_valid(self, tmp_path):
+        from ui.services.pdf_convert_ui_service import _md_label
+        f = tmp_path / "ok.md"
+        f.write_text("# Hello")
+        ok, label = _md_label(str(f))
+        assert ok is True
+        assert label == "已转换"

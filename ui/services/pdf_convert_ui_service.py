@@ -1,7 +1,9 @@
 """PDF-to-Markdown conversion UI service."""
 
 from src.files.path_resolver import (
+    markdown_status,
     normalize_storage_path,
+    pdf_status,
     resolve_project_path,
 )
 from src.utils.logger import get_logger
@@ -23,17 +25,29 @@ def _resolve_for_read(raw: str | None):
     return p if p.is_file() else None
 
 
+def _pdf_label(raw_path: str | None) -> tuple[bool, str]:
+    """Return ``(ok, label)`` for a pdf_path, using path_resolver."""
+    normalised = normalize_storage_path(raw_path)
+    if not normalised:
+        return False, "路径缺失"
+    resolved = resolve_project_path(normalised)
+    return pdf_status(resolved)
+
+
 def _md_label(raw_path: str | None) -> tuple[bool, str]:
     """Return ``(ok, label)`` for an md_path, using UI-friendly labels."""
     normalised = normalize_storage_path(raw_path)
     if not normalised:
         return False, "未转换"
     resolved = resolve_project_path(normalised)
-    if resolved is None or not resolved.is_file():
+    ok, label = markdown_status(resolved)
+    # Keep the semantic that "no file" means "not yet converted"
+    if label in ("路径缺失", "文件不存在"):
         return False, "未转换"
-    if resolved.suffix.lower() != ".md":
-        return False, "格式异常"
-    return True, "已转换"
+    if label == "已存在":
+        return True, "已转换"
+    # Pass through fine-grained labels: 不是文件 / 文件为空 / 格式异常
+    return ok, label
 
 
 def get_conversion_stats() -> dict:
@@ -54,23 +68,11 @@ def get_pending_papers(limit: int = 20) -> dict:
         papers = []
         for p in raw:
             raw_pdf = p.get("pdf_path")
-            # Normalize legacy path formats, then resolve to absolute for existence check
-            normalized_pdf = normalize_storage_path(raw_pdf)
-            if normalized_pdf:
-                resolved_pdf = resolve_project_path(normalized_pdf)
-                pdf_avail = resolved_pdf.is_file() and resolved_pdf.suffix.lower() == ".pdf"
-                pdf_label = "已存在" if pdf_avail else (
-                    "格式异常" if resolved_pdf.suffix.lower() != ".pdf" else "文件不存在"
-                )
-            else:
-                pdf_avail = False
-                pdf_label = "路径缺失"
+            pdf_avail, pdf_label = _pdf_label(raw_pdf)
 
             raw_md = p.get("md_path")
             md_avail, md_label = _md_label(raw_md)
 
-            # Store the portable path for UI display
-            pdf_path = normalized_pdf or raw_pdf or ""
             md_path = normalize_storage_path(raw_md) or raw_md or ""
 
             papers.append({
@@ -80,7 +82,7 @@ def get_pending_papers(limit: int = 20) -> dict:
                 "year": p.get("year"),
                 "journal": p.get("journal"),
                 "doi": p.get("doi"),
-                "pdf_path": pdf_path,
+                "pdf_path": normalize_storage_path(raw_pdf) or raw_pdf or "",
                 "pdf_available": pdf_avail,
                 "pdf_status_label": pdf_label,
                 "md_path": md_path,
@@ -109,16 +111,7 @@ def get_converted_papers(limit: int = 20) -> dict:
 
         for p in raw:
             raw_pdf = p.get("pdf_path")
-            normalized_pdf = normalize_storage_path(raw_pdf)
-            if normalized_pdf:
-                resolved_pdf = resolve_project_path(normalized_pdf)
-                pdf_avail = resolved_pdf.is_file() and resolved_pdf.suffix.lower() == ".pdf"
-                pdf_label = "\u5df2\u5b58\u5728" if pdf_avail else (
-                    "\u683c\u5f0f\u5f02\u5e38" if resolved_pdf.suffix.lower() != ".pdf" else "\u6587\u4ef6\u4e0d\u5b58\u5728"
-                )
-            else:
-                pdf_avail = False
-                pdf_label = "\u8def\u5f84\u7f3a\u5931"
+            pdf_avail, pdf_label = _pdf_label(raw_pdf)
 
             raw_md = p.get("md_path")
             md_avail, md_label = _md_label(raw_md)
@@ -130,7 +123,7 @@ def get_converted_papers(limit: int = 20) -> dict:
                 "year": p.get("year"),
                 "journal": p.get("journal"),
                 "doi": p.get("doi"),
-                "pdf_path": normalized_pdf or raw_pdf or "",
+                "pdf_path": normalize_storage_path(raw_pdf) or raw_pdf or "",
                 "pdf_available": pdf_avail,
                 "pdf_status_label": pdf_label,
                 "md_path": normalize_storage_path(raw_md) or raw_md or "",
