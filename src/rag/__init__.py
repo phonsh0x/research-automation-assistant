@@ -12,6 +12,7 @@ RAG 检索引擎 — 基于向量数据库的文献检索增强生成。
 参考 literature-rag-assistant skill 规范。
 """
 
+from src.rag.chunker import MarkdownChunk, MarkdownChunker
 from src.rag.engine import RAGEngine
 
-__all__ = ["RAGEngine"]
+__all__ = ["MarkdownChunk", "MarkdownChunker", "RAGEngine"]
