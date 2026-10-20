@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="科研自动化助手 API",
     description="课题组文献管理与科研辅助系统 — 提供检索、RAG 问答、PDF 转换、画像分析等接口",
-    version="0.1.0",
+    version="0.3.0",
     lifespan=lifespan,
     docs_url="/docs",
     redoc_url="/redoc",
@@ -84,7 +84,7 @@ async def health_check():
     """服务健康检查接口。"""
     return {
         "status": "ok",
-        "version": "0.1.0",
+        "version": "0.3.0",
         "service": "科研自动化助手",
         "database": "connected" if _check_db() else "disconnected",
     }
@@ -112,8 +112,8 @@ async def get_stats():
     """获取系统总体统计信息。"""
     stats = {
         "app": "科研自动化助手",
-        "version": "0.1.0",
-        "phase": "Phase 1 — 基础（检索 + 下载 + 入库）",
+        "version": "0.3.0",
+        "phase": "Phase 2.3 — 检索 / 全文获取 / PDF 转 Markdown 已完成",
     }
 
     try:
@@ -393,20 +393,23 @@ async def convert_pending(limit: int = 20):
     return {"pending": result.get("data", {}).get("papers", []), "count": result.get("data", {}).get("count", 0)}
 
 
-@app.post("/api/v1/convert/{paper_id}")
-async def convert_paper(paper_id: int):
-    """Convert a single paper's PDF to Markdown."""
-    from ui.services.pdf_convert_ui_service import convert_single
-    result = convert_single(paper_id)
-    return {"success": result["success"], "data": result.get("data"), "error": result.get("error")}
-
-
 @app.post("/api/v1/convert/batch")
 async def convert_batch_papers(limit: int = 10):
     """Batch convert pending papers."""
     from ui.services.pdf_convert_ui_service import convert_batch
     result = convert_batch(limit=limit)
     return {"success": result["success"], "data": result.get("data"), "message": result.get("message")}
+
+
+# NOTE: keep this dynamic route *after* the static "/convert/batch" route.
+# Starlette matches routes in declaration order, so declaring
+# "/convert/{paper_id}" first would shadow "/convert/batch" (422 on int parse).
+@app.post("/api/v1/convert/{paper_id}")
+async def convert_paper(paper_id: int):
+    """Convert a single paper's PDF to Markdown."""
+    from ui.services.pdf_convert_ui_service import convert_single
+    result = convert_single(paper_id)
+    return {"success": result["success"], "data": result.get("data"), "error": result.get("error")}
 
 
 @app.get("/api/v1/convert/preview/{paper_id}")

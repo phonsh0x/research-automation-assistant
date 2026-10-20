@@ -9,9 +9,9 @@ so that app.py and page modules can import them without duplication.
 # App metadata
 # ============================================================================
 
-VERSION = "0.2.0"
-VERSION_LABEL = f"版本: {VERSION} (Phase 2)"
-TECH_STACK_LABEL = "基于 DeepSeek-V4-Pro"
+VERSION = "0.3.0"
+VERSION_LABEL = f"版本: {VERSION} (Phase 2.3)"
+TECH_STACK_LABEL = "Python · Streamlit · FastAPI · SQLite · PyMuPDF"
 
 # ============================================================================
 # Page navigation
