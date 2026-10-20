@@ -1,0 +1,39 @@
+# Normalise all text files to LF in the repository,
+# regardless of the OS the contributor uses.
+* text=auto eol=lf
+
+# Source code and documentation
+*.py        text eol=lf
+*.md        text eol=lf
+*.sql       text eol=lf
+*.toml      text eol=lf
+*.yaml      text eol=lf
+*.yml       text eol=lf
+*.json      text eol=lf
+*.txt       text eol=lf
+*.cfg       text eol=lf
+*.ini       text eol=lf
+*.template  text eol=lf
+.gitignore  text eol=lf
+.gitattributes text eol=lf
+
+# Windows-only scripts keep CRLF
+*.bat       text eol=crlf
+*.cmd       text eol=crlf
+*.ps1       text eol=crlf
+
+# Binary artefacts — never diff, never convert
+*.pdf       binary
+*.png       binary
+*.jpg       binary
+*.jpeg      binary
+*.gif       binary
+*.ico       binary
+*.zip       binary
+*.7z        binary
+*.db        binary
+*.sqlite    binary
+*.sqlite3   binary
+*.xlsx      binary
+*.docx      binary
+*.whl       binary

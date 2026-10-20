@@ -24,15 +24,19 @@ feedparser>=6.0.0         # RSS feed 解析（期刊监控）
 # --- Phase 1: 数据库 ---
 # SQLite 为 Python 内置，无需额外安装
 
-# --- Phase 2: PDF 转换 ---
-marker-pdf>=1.0.0         # PDF 转 Markdown（推荐）
-pymupdf>=1.23.0           # 轻量级 PDF 文本提取
+# --- Phase 2: PDF 转换（已启用）---
+pymupdf>=1.23.0           # PDF 文本提取（src/pdf_converter 使用）
+# 以下为备选引擎，当前代码未 import，安装前请先实现对应 adapter：
+# marker-pdf>=1.0.0       # PDF 转 Markdown（需 torch，体积大）
 # pymupdf4llm>=0.1.0      # 为 LLM 优化的 PDF 处理
-# markitdown>=0.1.0        # Microsoft 文档转换工具
-# nougat-ocr>=0.1.0        # 高精度学术 PDF 解析（需 CUDA）
+# markitdown>=0.1.0       # Microsoft 文档转换工具
+# nougat-ocr>=0.1.0       # 高精度学术 PDF 解析（需 CUDA）
 
-# --- Phase 2: RAG 嵌入和向量检索 ---
-chromadb>=0.4.15           # 向量数据库
+# --- Phase 2.4: RAG 嵌入和向量检索（规划中，尚未启用）---
+# 当前仅实现 src/rag/chunker.py（纯文本切片，无第三方依赖）。
+# RAGEngine 仍为占位实现，因此 chromadb 暂不安装，避免无谓地拉取重型依赖。
+# 实现向量检索时取消下面一行的注释：
+# chromadb>=0.4.15        # 向量数据库
 # sentence-transformers>=2.2.0  # 本地嵌入模型（bge-large-zh-v1.5 等）
 # flagembedding>=1.2.0     # BGE 系列模型
 

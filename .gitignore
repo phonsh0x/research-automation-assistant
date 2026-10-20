@@ -55,14 +55,14 @@ htmlcov/
 *.tmp
 *.bak
 
-# ===== ±¾µØÃô¸ĞÅäÖÃ =====
+# ===== æœ¬åœ°æ•æ„Ÿé…ç½® =====
 .env
 *.env
 config/api_keys.json
 config/*.local.json
 config/*.secret.json
 
-# ===== Python »º´æÓëĞéÄâ»·¾³ =====
+# ===== Python ç¼“å­˜ä¸è™šæ‹Ÿç¯å¢ƒ =====
 __pycache__/
 *.py[cod]
 .pytest_cache/
@@ -72,23 +72,35 @@ __pycache__/
 venv/
 env/
 
-# ===== ÔËĞĞÈÕÖ¾ =====
+# ===== è¿è¡Œæ—¥å¿— =====
 *.log
 data/logs/
 
-# ===== Êı¾İ¿âÓëÔËĞĞ²úÎï =====
+# ===== æ•°æ®åº“ä¸è¿è¡Œäº§ç‰© =====
 data/*.db
 data/*.sqlite
 data/*.sqlite3
 data/paper.db
 
-# ===== ÎÄÏ×Óë½âÎö½á¹û£¬²»Ìá½»µ½ Git =====
+# ===== æ–‡çŒ®ä¸è§£æç»“æœï¼Œä¸æäº¤åˆ° Git =====
 data/pdf/
 data/markdown/
 data/vector_db/
 data/profiles/
 data/search_results/
 
-# ===== ÏµÍ³ÎÄ¼ş =====
+# ===== ç³»ç»Ÿæ–‡ä»¶ =====
 .DS_Store
 Thumbs.db
+
+# ===== AI åŠ©æ‰‹æœ¬åœ°é…ç½®ï¼ˆä¸æäº¤ï¼‰ =====
+.claude/settings.local.json
+.claude/*.local.json
+.claude/**/*.local.md
+
+# ===== ä¸Šä¼ æš‚å­˜ç›®å½•ï¼ˆä¸æäº¤ï¼‰ =====
+data/temp/
+
+# ===== åˆå¹¶å†²çªæ®‹ç•™ =====
+*.orig
+*.rej
