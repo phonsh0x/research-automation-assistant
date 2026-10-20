@@ -323,9 +323,13 @@ def build_markdown_storage_path(title: str, paper_id: int | None = None,
 
 
 def build_upload_stage_path(original_filename: str) -> Path:
-    """Build an absolute path under ``temp/paper_uploads/`` for a staged
-    upload, avoiding name collisions."""
-    stage_dir = get_data_path("temp/paper_uploads")
+    """Build an absolute path under ``data/temp/paper_uploads/`` for a staged
+    upload, avoiding name collisions.
+
+    Runtime artefacts belong under ``data/`` (which is git-ignored); keeping the
+    staging area there avoids littering the repository root.
+    """
+    stage_dir = get_data_path("data/temp/paper_uploads")
     stem = safe_filename(original_filename, max_length=120)
     if not stem:
         stem = "upload"

@@ -415,12 +415,14 @@ class TestBuildMarkdownStoragePath:
 # ---------------------------------------------------------------------------
 
 class TestBuildUploadStagePath:
-    def test_returns_under_temp_paper_uploads(self, resolver):
+    def test_returns_under_data_temp_paper_uploads(self, resolver, project_root):
         p = resolver.build_upload_stage_path("test.pdf")
         assert p.is_absolute()
         path_str = p.as_posix()
-        assert "temp" in path_str
-        assert "paper_uploads" in path_str
+        # Staging must live under data/ so it is covered by .gitignore and does
+        # not create a stray directory at the repository root.
+        assert "data/temp/paper_uploads" in path_str
+        assert p.parent == project_root / "data" / "temp" / "paper_uploads"
 
     def test_filename_sanitised(self, resolver):
         p = resolver.build_upload_stage_path('bad:file<name>.pdf')
