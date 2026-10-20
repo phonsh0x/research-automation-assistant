@@ -244,9 +244,9 @@ research-automation-assistant/
 ### 第 1 步: 确认环境
 
 ```bash
-cd F:/Agent/V202605071128/research-automation-assistant
+cd /path/to/research-automation-assistant
 git status
-python run.py test  # 应为 110 passed
+python run.py test  # 当前基线：299 passed
 ```
 
 ### 第 2 步: 阅读关键文档
@@ -266,7 +266,7 @@ git checkout -b feature/ui-refactor
 
 ### 关键约束
 
-- **每次修改后运行 `python run.py test`** — 必须 110 passed
+- **每次修改后运行 `python run.py test`** — 必须 299 passed
 - **不要往 `ui/app.py` 塞新代码** — 优先拆分
 - **不要实现 Sci-Hub/LibGen** — 合规红线
 - **不要破坏已有 schema** — 新增用 migration

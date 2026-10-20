@@ -96,7 +96,7 @@ def normalize_storage_path(raw: str | None) -> str | None:
     """Normalize a stored path string to the canonical ``data/xxx/yyy`` format.
 
     Handles legacy formats that may still exist in databases:
-    - Absolute Windows paths: ``F:\\Agent\\...\\data\\markdown\\a.md``
+    - Absolute Windows paths: ``C:\\project\\data\\markdown\\a.md``
     - Backslash separators: ``data\\\\markdown\\\\a.md``
     - Missing ``data/`` prefix: ``markdown/a.md`` → ``data/markdown/a.md``
     - Doubled ``data/`` prefix: ``data/data/markdown/a.md`` → ``data/markdown/a.md``
