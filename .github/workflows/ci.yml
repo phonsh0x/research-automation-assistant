@@ -12,7 +12,13 @@ permissions:
 jobs:
   test:
     name: pytest (Python ${{ matrix.python-version }})
-    runs-on: ubuntu-latest
+    # Windows is the primary target platform: the application is a local
+    # desktop tool and src/files/path_resolver.py implements Windows-specific
+    # path handling (drive letters, backslashes, illegal filename chars).
+    # At least one test asserts that a "Z:/..." path is treated as absolute,
+    # which only holds on Windows. Add a ubuntu job once the suite is made
+    # fully platform-agnostic.
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
