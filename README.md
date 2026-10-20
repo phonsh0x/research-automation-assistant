@@ -2,9 +2,9 @@
 
 > 面向学术课题组的本地优先科研工作流工具：**文献检索 → 合法全文获取 → PDF 转 Markdown → 结构化入库 → （规划中）RAG 问答 / 方向画像 / 写作辅助**。
 
-[![CI](https://github.com/USERNAME/research-automation-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/USERNAME/research-automation-assistant/actions/workflows/ci.yml)
+[![CI](https://github.com/phonsh0x/research-automation-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/phonsh0x/research-automation-assistant/actions/workflows/ci.yml)
 
-> 徽章中的 `USERNAME` 需在创建 GitHub 仓库后替换为实际账号。
+> 徽章指向 `phonsh0x/research-automation-assistant`；若仓库改名或转移，需同步更新此处与下方 clone 地址。
 
 ---
 
@@ -138,7 +138,7 @@
 ## 七、安装
 
 ```bash
-git clone https://github.com/USERNAME/research-automation-assistant.git
+git clone https://github.com/phonsh0x/research-automation-assistant.git
 cd research-automation-assistant
 
 # 建议使用虚拟环境
