@@ -48,9 +48,14 @@ class CrossrefSearcher(BaseSearcher):
             "order": "desc",
         }
 
-        # 年份过滤
-        if query.year_from is not None and query.year_to is not None:
-            params["filter"] = f"from-pub-date:{query.year_from},until-pub-date:{query.year_to}"
+        # 年份过滤（Crossref 用 from-pub-date / until-pub-date，允许只给单边）
+        date_filters = []
+        if query.year_from is not None:
+            date_filters.append(f"from-pub-date:{query.year_from}")
+        if query.year_to is not None:
+            date_filters.append(f"until-pub-date:{query.year_to}")
+        if date_filters:
+            params["filter"] = ",".join(date_filters)
 
         papers = []
         for attempt in range(1, MAX_RETRIES + 1):

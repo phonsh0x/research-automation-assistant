@@ -223,13 +223,19 @@ class OpenAlexSearcher(BaseSearcher):
 
     @staticmethod
     def _build_year_filter(year_from: Optional[int], year_to: Optional[int]) -> str:
-        """构建 OpenAlex 年份过滤条件。"""
+        """构建 OpenAlex 年份过滤条件。
+
+        OpenAlex 的 ``filter`` 参数以逗号分隔，语义是 **AND**，因此不能重复拼接
+        两个 ``publication_year``（那会变成"等于 2020 且等于 2025"，结果恒为空）。
+        年份区间必须使用官方的 ``from_publication_date`` / ``to_publication_date``
+        便捷过滤器，与 ``journal_watchlist`` 等处的既有用法保持一致。
+        """
         filters = []
         if year_from:
-            filters.append(f"publication_year:{year_from}")
+            filters.append(f"from_publication_date:{year_from}-01-01")
         if year_to:
-            filters.append(f"publication_year:{year_to}")
-        return ",".join(filters) if filters else ""
+            filters.append(f"to_publication_date:{year_to}-12-31")
+        return ",".join(filters)
 
     @staticmethod
     def _get_retry_after(response) -> int:
